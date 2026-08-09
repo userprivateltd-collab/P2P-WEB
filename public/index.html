@@ -21,11 +21,34 @@
         </header>
 
         <div id="room-section" class="section active">
-            <div class="input-group">
-                <input type="text" id="room-input" placeholder="Enter Room Code (e.g., 1234)" maxlength="8">
-                <button id="join-btn" class="primary-btn">Join / Create</button>
+            <h2>Secure Connection</h2>
+            <p>Create a secure room or join an existing one.</p>
+            
+            <div class="connection-options">
+                <div class="create-room-box">
+                    <button id="create-btn" class="btn primary">Create Secure Room</button>
+                    <div id="created-code-container" class="hidden mt-4">
+                        <p>Share this code:</p>
+                        <div class="code-display">
+                            <span id="generated-code">----</span>
+                            <button id="copy-btn" class="btn icon-btn" title="Copy Code">📋</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="divider">
+                    <span>OR</span>
+                </div>
+
+                <div class="join-room-box">
+                    <div class="input-group">
+                        <input type="text" id="room-input" placeholder="Code (e.g. AB12)" maxlength="4" style="text-transform: uppercase;" />
+                        <button id="join-btn" class="btn secondary">Join Room</button>
+                    </div>
+                </div>
             </div>
-            <p id="room-status" class="status-message"></p>
+            
+            <p id="room-status" class="status-text mt-4"></p>
         </div>
 
         <div id="transfer-section" class="section hidden">

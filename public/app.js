@@ -12,6 +12,11 @@ const uploadArea = document.getElementById('upload-area');
 const selectedFileName = document.getElementById('selected-file-name');
 const sendBtn = document.getElementById('send-btn');
 
+const createBtn = document.getElementById('create-btn');
+const createdCodeContainer = document.getElementById('created-code-container');
+const generatedCodeSpan = document.getElementById('generated-code');
+const copyBtn = document.getElementById('copy-btn');
+
 const progressContainer = document.getElementById('progress-container');
 const progressText = document.getElementById('progress-text');
 const progressBar = document.getElementById('progress-bar');
@@ -99,21 +104,24 @@ function initPeer(roomId) {
         
         conn.on('error', (err) => {
             tempPeer.destroy();
-            createRoom(fullPeerId);
+            roomStatus.innerText = 'Failed to connect. Code might be invalid or peer offline.';
+            joinBtn.disabled = false;
         });
         
         setTimeout(() => {
             if (!dataConnection) {
                 conn.close();
                 tempPeer.destroy();
-                createRoom(fullPeerId);
+                roomStatus.innerText = 'Connection timed out. Check the code and try again.';
+                joinBtn.disabled = false;
             }
-        }, 3000);
+        }, 5000);
     });
 }
 
-function createRoom(fullPeerId) {
-    roomStatus.innerText = 'Creating room... Waiting for peer to join.';
+function createRoom(roomId) {
+    const fullPeerId = APP_PREFIX + roomId;
+    roomStatus.innerText = 'Room created. Waiting for peer to join...';
     peer = new Peer(fullPeerId);
     
     peer.on('open', (id) => {
@@ -235,13 +243,40 @@ function setupConnection(conn) {
 
 // UI Handlers
 joinBtn.addEventListener('click', () => {
-    const roomId = roomInput.value.trim().toLowerCase();
-    if (roomId.length > 0) {
+    const roomId = roomInput.value.trim().toUpperCase();
+    if (roomId.length === 4) {
         joinBtn.disabled = true;
+        createBtn.disabled = true;
         roomStatus.innerText = 'Connecting...';
         initPeer(roomId);
+    } else {
+        roomStatus.innerText = 'Please enter a valid 4-character code.';
     }
 });
+
+createBtn.addEventListener('click', () => {
+    createBtn.disabled = true;
+    joinBtn.disabled = true;
+    const newCode = generateRoomCode();
+    generatedCodeSpan.innerText = newCode;
+    createdCodeContainer.classList.remove('hidden');
+    createRoom(newCode);
+});
+
+copyBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText(generatedCodeSpan.innerText);
+    copyBtn.innerText = '✓';
+    setTimeout(() => { copyBtn.innerText = '📋'; }, 2000);
+});
+
+function generateRoomCode() {
+    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const numbers = '0123456789';
+    let code = '';
+    for(let i=0; i<2; i++) code += letters.charAt(Math.floor(Math.random() * letters.length));
+    for(let i=0; i<2; i++) code += numbers.charAt(Math.floor(Math.random() * numbers.length));
+    return code;
+}
 
 fileInput.addEventListener('change', (e) => {
     if (e.target.files.length > 0) {
@@ -350,6 +385,13 @@ function saveReceivedFile() {
     downloadLink.href = url;
     downloadLink.download = incomingFileInfo.name;
     downloadLink.innerText = `Download ${incomingFileInfo.name}`;
+    
+    fileInput.disabled = false;
+    
+    setTimeout(() => {
+        progressContainer.classList.add('hidden');
+        resetFileSelection();
+    }, 5000);
 }
 
 function updateProgress(percentage) {
