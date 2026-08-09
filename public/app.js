@@ -1,4 +1,4 @@
-const CHUNK_SIZE = 16000; // Strictly under 16KB (16384 bytes) to leave room for the 28-byte encryption overhead (IV + Auth Tag) so it doesn't break WebRTC limits on some devices
+const CHUNK_SIZE = 4096; // 4KB chunk size to guarantee safe delivery over strict WebRTC TURN relays and smaller MTUs
 
 // DOM Elements
 const roomSection = document.getElementById('room-section');
@@ -336,8 +336,8 @@ function sendFile(file) {
             payload.set(iv, 0);
             payload.set(new Uint8Array(encryptedChunk), iv.length);
             
-            // Send the Uint8Array directly, PeerJS handles TypedArrays perfectly
-            dataConnection.send(payload);
+            // Send the ArrayBuffer directly for maximum PeerJS compatibility
+            dataConnection.send(payload.buffer);
             
             offset += rawChunk.byteLength;
             const percentage = Math.round((offset / file.size) * 100);
