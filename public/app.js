@@ -92,7 +92,7 @@ function initPeer(roomId) {
     const tempPeer = new Peer();
     
     tempPeer.on('open', (id) => {
-        const conn = tempPeer.connect(fullPeerId);
+        const conn = tempPeer.connect(fullPeerId, { serialization: 'raw', reliable: true });
         
         conn.on('open', () => {
             roomStatus.innerText = 'Connected to peer! Negotiating E2EE...';
