@@ -221,14 +221,209 @@ function checkE2EEComplete() {
 
     if (sharedCryptoKey && localE2EEReady && remoteE2EEReady && dataConnection && dataConnection.open && isIceConnected) {
         console.log('[HANDSHAKE] E2EE COMPLETE');
-        roomStatus.innerText = 'Connected & E2EE Secured 🔒';
+        roomStatus.innerText = 'Connected & E2EE Secured';
         const connStatusEl = document.querySelector('.connection-status');
         if (connStatusEl) {
-            connStatusEl.innerHTML = '<span class="status-dot connected"></span> Connected & E2EE Secured 🔒';
+            connStatusEl.innerHTML = '<span class="status-dot connected"></span><svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" stroke-width="2.2" fill="none"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg><span>Connected & E2EE Secured</span>';
         }
         if (handshakeResolve) {
             handshakeResolve();
         }
+        if (filesToTransfer.length > 0) {
+            sendBtn.disabled = false;
+        }
+    }
+}
+
+// --- PeerJS Logic ---
+
+function initPeer(roomId) {
+    const fullPeerId = APP_PREFIX + roomId;
+    const tempPeer = new Peer(peerConfig);
+    
+    tempPeer.on('open', (id) => {
+        console.log('[NET] Peer open');
+        const conn = tempPeer.connect(fullPeerId);
+        setupPeerConnectionLogging(conn);
+        
+        const connectTimeout = setTimeout(() => {
+            if (!dataConnection) {
+                conn.close();
+                tempPeer.destroy();
+                roomStatus.innerText = 'Connection timed out. Check the code or try again.';
+                joinBtn.disabled = false;
+                createBtn.disabled = false;
+            }
+        }, 30000); // 30 seconds for WebRTC ICE negotiation
+
+        const runHandshake = async () => {
+            if (!myKeyPair) {
+                clearTimeout(connectTimeout);
+                roomStatus.innerText = 'Connected to peer! Negotiating E2EE...';
+                setupConnection(conn);
+                peer = tempPeer;
+                showTransferSection();
+                await startE2EEHandshake();
+            }
+        };
+
+        conn.on('open', async () => {
+            await runHandshake();
+        });
+        
+        // Backup trigger for mobile browsers where open event may fire instantaneously
+        setTimeout(async () => {
+            if (conn.open && !myKeyPair) {
+                await runHandshake();
+            }
+        }, 300);
+
+        conn.on('error', (err) => {
+            clearTimeout(connectTimeout);
+            tempPeer.destroy();
+            roomStatus.innerText = 'Failed to connect. Code might be invalid or peer offline.';
+            joinBtn.disabled = false;
+            createBtn.disabled = false;
+        });
+    });
+
+    tempPeer.on('error', (err) => {
+        console.error('Peer error:', err);
+        roomStatus.innerText = 'Connection error: ' + (err.message || err.type);
+        joinBtn.disabled = false;
+        createBtn.disabled = false;
+    });
+}
+
+function createRoom(roomId) {
+    const fullPeerId = APP_PREFIX + roomId;
+    roomStatus.innerText = 'Room created. Waiting for peer to join...';
+    peer = new Peer(fullPeerId, peerConfig);
+    
+    peer.on('open', (id) => {
+        console.log('[NET] Peer open');
+        console.log('Room created with ID:', id);
+    });
+    
+    peer.on('connection', async (conn) => {
+        if (dataConnection) {
+            conn.close();
+            return;
+        }
+        setupPeerConnectionLogging(conn);
+        roomStatus.innerText = 'Peer joined! Negotiating E2EE...';
+        setupConnection(conn);
+        showTransferSection();
+
+        const runHandshake = async () => {
+            if (!myKeyPair) {
+                await startE2EEHandshake();
+            }
+        };
+
+        if (conn.open) {
+            await runHandshake();
+        } else {
+            conn.on('open', async () => {
+                await runHandshake();
+            });
+            // Backup check for mobile browsers where open event fires right before listener registration
+            setTimeout(async () => {
+                if (conn.open && !myKeyPair) {
+                    await runHandshake();
+                }
+            }, 300);
+        }
+    });
+    
+    peer.on('error', (err) => {
+        if (err.type === 'unavailable-id') {
+            roomStatus.innerText = 'Room already exists and is full or busy.';
+            joinBtn.disabled = false;
+            createBtn.disabled = false;
+        } else {
+            roomStatus.innerText = 'Connection error: ' + err.message;
+            joinBtn.disabled = false;
+            createBtn.disabled = false;
+        }
+    });
+}
+
+function setupConnection(conn) {
+    dataConnection = conn;
+    
+    dataConnection.on('data', async (data) => {
+        if (typeof data === 'string') {
+            const meta = JSON.parse(data);
+            
+            if (meta.type === 'ecdh-public-key') {
+                console.log('[HANDSHAKE] Remote public key received');
+                try {
+                    const remotePub = await importPublicKey(meta.key);
+                    sharedCryptoKey = await deriveAESKey(myKeyPair.privateKey, remotePub);
+                    console.log('[HANDSHAKE] Shared AES key derived');
+                    localE2EEReady = true;
+                    dataConnection.send(JSON.stringify({ type: 'e2ee-ready' }));
+                    console.log('[HANDSHAKE] Local E2EE ready sent');
+                    checkE2EEComplete();
+                } catch (e) {
+                    console.error("E2EE Handshake failed", e);
+                }
+            } else if (meta.type === 'e2ee-ready') {
+                remoteE2EEReady = true;
+                console.log('[HANDSHAKE] Remote E2EE ready received');
+                checkE2EEComplete();
+            } else if (meta.type === 'file-start') {
+                decryptionQueue = decryptionQueue.then(async () => {
+                    await handshakePromise;
+                    incomingFileInfo = meta;
+                    incomingFileData = [];
+                    receivedSize = 0;
+                    receivedChunks = 0;
+                    expectedChunks = meta.totalChunks || 0;
+                    console.log(`[RECEIVER] file-start: name=${meta.name}, size=${meta.size}, fileIndex=${meta.fileIndex + 1}/${meta.totalFiles}`);
+                    
+                    progressContainer.classList.remove('hidden');
+                    progressText.innerText = `Receiving (${(meta.fileIndex || 0) + 1}/${meta.totalFiles || 1}): ${meta.name}`;
+                    updateProgress(0);
+                });
+            } else if (meta.type === 'file-end') {
+                decryptionQueue.then(async () => {
+                    await handshakePromise;
+                    console.log(`[RECEIVER] file-end received for ${incomingFileInfo.name}.`);
+                    saveReceivedFile();
+                });
+            }
+        } else {
+            // Binary data (Encrypted ArrayBuffer)
+            decryptionQueue = decryptionQueue.then(async () => {
+                await handshakePromise;
+                try {
+                    let payload;
+                    if (data instanceof Blob) {
+                        payload = new Uint8Array(await data.arrayBuffer());
+                    } else {
+                        payload = new Uint8Array(data);
+                    }
+
+                    if (payload.length <= 12) return;
+                    
+                    const iv = payload.slice(0, 12);
+                    const encryptedChunk = payload.slice(12);
+
+                    const decryptedChunk = await window.crypto.subtle.decrypt(
+                        { name: 'AES-GCM', iv: iv },
+                        sharedCryptoKey,
+                        encryptedChunk
+                    );
+                    incomingFileData.push(decryptedChunk);
+                    receivedChunks++;
+                    receivedSize += decryptedChunk.byteLength;
+                    
+                    const percentage = Math.round((receivedSize / incomingFileInfo.size) * 100);
+                    updateProgress(percentage);
+                } catch (err) {
+                    console.error(`[RECEIVER] Decryption FAILED for chunk #${receivedChunks}:`, err);
         if (filesToTransfer.length > 0) {
             sendBtn.disabled = false;
         }
@@ -479,8 +674,10 @@ createBtn.addEventListener('click', () => {
 
 copyBtn.addEventListener('click', () => {
     navigator.clipboard.writeText(generatedCodeSpan.innerText);
-    copyBtn.innerText = '✓';
-    setTimeout(() => { copyBtn.innerText = '📋'; }, 2000);
+    copyBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" stroke="#10b981" stroke-width="2.5" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+    setTimeout(() => { 
+        copyBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>'; 
+    }, 2000);
 });
 
 document.querySelectorAll('.reload-action-btn').forEach(btn => {
@@ -510,10 +707,10 @@ fileInput.addEventListener('change', (e) => {
     if (e.target.files.length > 0) {
         filesToTransfer = Array.from(e.target.files);
         if (filesToTransfer.length === 1) {
-            selectedFileName.innerText = `📄 ${filesToTransfer[0].name} (${formatBytes(filesToTransfer[0].size)})`;
+            selectedFileName.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg> ${filesToTransfer[0].name} (${formatBytes(filesToTransfer[0].size)})`;
         } else {
             const totalSize = filesToTransfer.reduce((sum, f) => sum + f.size, 0);
-            selectedFileName.innerText = `📁 ${filesToTransfer.length} files selected (${formatBytes(totalSize)} total):\n` +
+            selectedFileName.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg> ${filesToTransfer.length} files selected (${formatBytes(totalSize)} total):\n` +
                 filesToTransfer.map(f => f.name).join(', ');
         }
         selectedFileName.style.display = 'inline-block';
@@ -637,7 +834,7 @@ function saveReceivedFile() {
         item.className = 'download-item-btn';
         item.href = url;
         item.download = incomingFileInfo.name;
-        item.innerHTML = `<span>📄 ${incomingFileInfo.name} (${formatBytes(incomingFileInfo.size)})</span><span>⬇️ Download</span>`;
+        item.innerHTML = `<span class="file-item-label"><svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg> ${incomingFileInfo.name} (${formatBytes(incomingFileInfo.size)})</span><span class="dl-btn-text"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Download</span>`;
         downloadList.appendChild(item);
     }
 
