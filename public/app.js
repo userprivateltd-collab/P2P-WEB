@@ -126,16 +126,39 @@ function checkE2EEComplete() {
     }
 }
 
+const peerConfig = {
+    config: {
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
+            { urls: 'stun:stun3.l.google.com:19302' },
+            { urls: 'stun:stun4.l.google.com:19302' }
+        ]
+    }
+};
+
 // --- PeerJS Logic ---
 
 function initPeer(roomId) {
     const fullPeerId = APP_PREFIX + roomId;
-    const tempPeer = new Peer();
+    const tempPeer = new Peer(peerConfig);
     
     tempPeer.on('open', (id) => {
         const conn = tempPeer.connect(fullPeerId, { serialization: 'raw', reliable: true });
         
+        const connectTimeout = setTimeout(() => {
+            if (!dataConnection) {
+                conn.close();
+                tempPeer.destroy();
+                roomStatus.innerText = 'Connection timed out. Check the code or try again.';
+                joinBtn.disabled = false;
+                createBtn.disabled = false;
+            }
+        }, 20000); // 20 seconds for cross-network WebRTC STUN/ICE gathering
+
         conn.on('open', async () => {
+            clearTimeout(connectTimeout);
             roomStatus.innerText = 'Connected to peer! Negotiating E2EE...';
             setupConnection(conn);
             peer = tempPeer;
@@ -146,28 +169,26 @@ function initPeer(roomId) {
         });
         
         conn.on('error', (err) => {
+            clearTimeout(connectTimeout);
             tempPeer.destroy();
             roomStatus.innerText = 'Failed to connect. Code might be invalid or peer offline.';
             joinBtn.disabled = false;
             createBtn.disabled = false;
         });
-        
-        setTimeout(() => {
-            if (!dataConnection) {
-                conn.close();
-                tempPeer.destroy();
-                roomStatus.innerText = 'Connection timed out. Check the code and try again.';
-                joinBtn.disabled = false;
-                createBtn.disabled = false;
-            }
-        }, 5000);
+    });
+
+    tempPeer.on('error', (err) => {
+        console.error('Peer error:', err);
+        roomStatus.innerText = 'Connection error: ' + (err.message || err.type);
+        joinBtn.disabled = false;
+        createBtn.disabled = false;
     });
 }
 
 function createRoom(roomId) {
     const fullPeerId = APP_PREFIX + roomId;
     roomStatus.innerText = 'Room created. Waiting for peer to join...';
-    peer = new Peer(fullPeerId);
+    peer = new Peer(fullPeerId, peerConfig);
     
     peer.on('open', (id) => {
         console.log('Room created with ID:', id);
