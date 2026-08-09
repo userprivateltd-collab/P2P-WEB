@@ -31,6 +31,12 @@ let fileToSend = null;
 // E2EE State
 let myKeyPair = null;
 let sharedCryptoKey = null;
+let handshakeResolve = null;
+let handshakePromise = null;
+
+function resetHandshakeGate() {
+    handshakePromise = new Promise(resolve => { handshakeResolve = resolve; });
+}
 
 // File Receiving state
 let incomingFileInfo = null;
@@ -77,7 +83,7 @@ async function deriveAESKey(privateKey, publicKey) {
 }
 
 async function performHandshake() {
-    myKeyPair = await generateECDHKeyPair();
+    // myKeyPair is pre-generated before this is called
     const pubJwk = await exportPublicKey(myKeyPair.publicKey);
     dataConnection.send(JSON.stringify({
         type: 'ecdh-public-key',
@@ -94,12 +100,14 @@ function initPeer(roomId) {
     tempPeer.on('open', (id) => {
         const conn = tempPeer.connect(fullPeerId, { serialization: 'raw', reliable: true });
         
-        conn.on('open', () => {
+        conn.on('open', async () => {
             roomStatus.innerText = 'Connected to peer! Negotiating E2EE...';
+            resetHandshakeGate();
+            myKeyPair = await generateECDHKeyPair(); // Generate BEFORE registering data handler
             setupConnection(conn);
             peer = tempPeer;
             showTransferSection();
-            performHandshake(); // Initiate handshake
+            performHandshake(); // Send public key
             
             peer.on('error', (err) => console.error(err));
         });
@@ -130,15 +138,17 @@ function createRoom(roomId) {
         console.log('Room created with ID:', id);
     });
     
-    peer.on('connection', (conn) => {
+    peer.on('connection', async (conn) => {
         if (dataConnection) {
             conn.close();
             return;
         }
         roomStatus.innerText = 'Peer joined! Negotiating E2EE...';
+        resetHandshakeGate();
+        myKeyPair = await generateECDHKeyPair(); // Generate BEFORE registering data handler
         setupConnection(conn);
         showTransferSection();
-        performHandshake(); // Initiate handshake
+        performHandshake(); // Send public key
     });
     
     peer.on('error', (err) => {
@@ -163,6 +173,8 @@ function setupConnection(conn) {
                 try {
                     const remotePub = await importPublicKey(meta.key);
                     sharedCryptoKey = await deriveAESKey(myKeyPair.privateKey, remotePub);
+                    handshakeResolve(); // Unblock any waiting binary chunks
+                    console.log('[RECEIVER] E2EE handshake complete. sharedCryptoKey derived.');
                     roomStatus.innerText = 'Connected & E2EE Secured 🔒';
                     // Update UI in transfer section too
                     document.querySelector('.connection-status').innerHTML = '<span class="status-dot connected"></span> Connected & E2EE Secured 🔒';
@@ -195,12 +207,9 @@ function setupConnection(conn) {
             }
         } else {
             // Binary data (Encrypted ArrayBuffer)
-            if (!sharedCryptoKey) {
-                console.error('[RECEIVER] Binary chunk arrived but sharedCryptoKey is NULL — E2EE handshake not complete yet!');
-                return;
-            }
-            
+            // Queue chunk and wait for handshake to complete before decrypting
             decryptionQueue = decryptionQueue.then(async () => {
+                await handshakePromise; // Wait for E2EE key derivation if not done yet
                 try {
                     let payload;
                     if (data instanceof Blob) {
