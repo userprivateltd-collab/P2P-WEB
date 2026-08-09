@@ -110,12 +110,18 @@ async function startE2EEHandshake() {
 }
 
 // =========================================================================
-// ICE / STUN / TURN CONFIGURATION
+// CENTRALIZED ICE / STUN / TURN CONFIGURATION
 // Fill in your TURN server details below to enable mobile-to-mobile and
 // mobile-to-laptop connections across cellular / Symmetric NAT firewalls.
 // =========================================================================
 const TURN_CONFIG = {
-    url: "",        // e.g. "turn:your-turn-server.com:3478" or "turns:your-turn-server.com:443"
+    // Specify your TURN URLs (UDP, TCP, TLS) as a string or array:
+    // e.g. [
+    //     "turn:your-turn-server.com:3478?transport=udp",
+    //     "turn:your-turn-server.com:3478?transport=tcp",
+    //     "turns:your-turn-server.com:443?transport=tcp"
+    // ]
+    urls: [],
     username: "",   // e.g. "your-username"
     credential: ""  // e.g. "your-password"
 };
@@ -127,22 +133,12 @@ function getIceServers() {
         { urls: 'stun:stun2.l.google.com:19302' },
         { urls: 'stun:stun3.l.google.com:19302' },
         { urls: 'stun:stun4.l.google.com:19302' },
-        {
-            urls: [
-                'turn:openrelay.metered.ca:80',
-                'turn:openrelay.metered.ca:443',
-                'turn:openrelay.metered.ca:443?transport=tcp',
-                'turns:openrelay.metered.ca:443',
-                'turns:openrelay.metered.ca:443?transport=tcp'
-            ],
-            username: 'openrelayproject',
-            credential: 'openrelayproject'
-        }
+        { urls: 'stun:stun.cloudflare.com:3478' }
     ];
 
-    if (TURN_CONFIG.url && TURN_CONFIG.username && TURN_CONFIG.credential) {
+    if (TURN_CONFIG.urls && (Array.isArray(TURN_CONFIG.urls) ? TURN_CONFIG.urls.length > 0 : TURN_CONFIG.urls) && TURN_CONFIG.username && TURN_CONFIG.credential) {
         servers.push({
-            urls: TURN_CONFIG.url,
+            urls: TURN_CONFIG.urls,
             username: TURN_CONFIG.username,
             credential: TURN_CONFIG.credential
         });
