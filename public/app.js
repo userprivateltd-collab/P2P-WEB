@@ -751,6 +751,168 @@ function setupConnection(conn) {
     });
 }
 
+// =========================================================================
+// 4-CHARACTER CODE ENTRY POP-UP MODAL LOGIC
+// =========================================================================
+
+const codeModal = document.getElementById('code-modal');
+const closeCodeModalBtn = document.getElementById('close-code-modal-btn');
+const modalJoinBtn = document.getElementById('modal-join-btn');
+const pinBoxes = [
+    document.getElementById('pin-0'),
+    document.getElementById('pin-1'),
+    document.getElementById('pin-2'),
+    document.getElementById('pin-3')
+];
+
+function openCodeModal() {
+    if (!codeModal) return;
+    codeModal.classList.remove('hidden');
+
+    const currentVal = roomInput.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    pinBoxes.forEach((box, idx) => {
+        if (!box) return;
+        box.value = currentVal[idx] || '';
+        if (box.value) {
+            box.classList.add('filled');
+        } else {
+            box.classList.remove('filled');
+        }
+    });
+
+    const firstEmpty = pinBoxes.find(b => b && !b.value) || pinBoxes[0];
+    if (firstEmpty) {
+        setTimeout(() => firstEmpty.focus(), 100);
+    }
+}
+
+function closeCodeModal() {
+    if (codeModal) {
+        codeModal.classList.add('hidden');
+    }
+}
+
+function getPinCode() {
+    return pinBoxes.map(b => (b ? b.value : '')).join('').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function updatePinBoxesFromCode(code) {
+    const clean = code.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+    pinBoxes.forEach((box, idx) => {
+        if (!box) return;
+        box.value = clean[idx] || '';
+        if (box.value) {
+            box.classList.add('filled');
+        } else {
+            box.classList.remove('filled');
+        }
+    });
+    roomInput.value = clean;
+}
+
+if (roomInput) {
+    roomInput.addEventListener('click', (e) => {
+        // Open pop-up modal on click (especially on desktop or when tapping input)
+        if (window.innerWidth > 768) {
+            openCodeModal();
+        }
+    });
+}
+
+if (closeCodeModalBtn) {
+    closeCodeModalBtn.addEventListener('click', closeCodeModal);
+}
+
+if (codeModal) {
+    codeModal.addEventListener('click', (e) => {
+        if (e.target === codeModal) {
+            closeCodeModal();
+        }
+    });
+}
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && codeModal && !codeModal.classList.contains('hidden')) {
+        closeCodeModal();
+    }
+});
+
+pinBoxes.forEach((box, index) => {
+    if (!box) return;
+
+    box.addEventListener('input', (e) => {
+        const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        e.target.value = val;
+
+        if (val) {
+            e.target.classList.add('filled');
+            if (index < 3 && pinBoxes[index + 1]) {
+                pinBoxes[index + 1].focus();
+            }
+        } else {
+            e.target.classList.remove('filled');
+        }
+
+        const code = getPinCode();
+        roomInput.value = code;
+
+        if (code.length === 4) {
+            setTimeout(() => {
+                closeCodeModal();
+                joinBtn.click();
+            }, 180);
+        }
+    });
+
+    box.addEventListener('keydown', (e) => {
+        if (e.key === 'Backspace' && !box.value && index > 0 && pinBoxes[index - 1]) {
+            pinBoxes[index - 1].focus();
+            pinBoxes[index - 1].value = '';
+            pinBoxes[index - 1].classList.remove('filled');
+            roomInput.value = getPinCode();
+        } else if (e.key === 'Enter') {
+            const code = getPinCode();
+            roomInput.value = code;
+            closeCodeModal();
+            joinBtn.click();
+        }
+    });
+
+    box.addEventListener('paste', (e) => {
+        e.preventDefault();
+        const pastedData = (e.clipboardData || window.clipboardData).getData('text');
+        if (!pastedData) return;
+
+        let cleanCode = pastedData.trim();
+        try {
+            const parsedUrl = new URL(cleanCode);
+            const paramRoom = parsedUrl.searchParams.get('room');
+            if (paramRoom) cleanCode = paramRoom;
+        } catch (err) {}
+
+        cleanCode = cleanCode.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+        updatePinBoxesFromCode(cleanCode);
+
+        if (cleanCode.length === 4) {
+            setTimeout(() => {
+                closeCodeModal();
+                joinBtn.click();
+            }, 200);
+        } else if (cleanCode.length > 0 && pinBoxes[cleanCode.length]) {
+            pinBoxes[cleanCode.length].focus();
+        }
+    });
+});
+
+if (modalJoinBtn) {
+    modalJoinBtn.addEventListener('click', () => {
+        const code = getPinCode();
+        roomInput.value = code;
+        closeCodeModal();
+        joinBtn.click();
+    });
+}
+
 // UI Handlers
 roomInput.addEventListener('input', (e) => {
     e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');

@@ -117,24 +117,26 @@
                             </div>
                         </div>
                         <div class="input-action-row">
-                            <input type="text" id="room-input" placeholder="4-CHAR CODE" maxlength="4" autocomplete="off" spellcheck="false" />
-                            <button id="scan-qr-btn" class="btn scan-glow-btn" title="Scan QR Code with Camera">
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M3 7V5a2 2 0 0 1 2-2h2"></path>
-                                    <path d="M17 3h2a2 2 0 0 1 2 2v2"></path>
-                                    <path d="M21 17v2a2 2 0 0 1-2 2h-2"></path>
-                                    <path d="M3 17v2a2 2 0 0 1 2 2h2"></path>
-                                    <rect x="7" y="7" width="10" height="10" rx="1"></rect>
-                                </svg>
-                                <span>Scan QR</span>
-                            </button>
-                            <button id="join-btn" class="btn secondary-glow-btn">
-                                <span>Join</span>
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2">
-                                    <line x1="5" y1="12" x2="19" y2="12"></line>
-                                    <polyline points="12 5 19 12 12 19"></polyline>
-                                </svg>
-                            </button>
+                            <input type="text" id="room-input" placeholder="4-CHAR CODE" maxlength="4" autocomplete="off" spellcheck="false" title="Click to enter 4-character room code" />
+                            <div class="input-action-buttons">
+                                <button id="scan-qr-btn" class="btn scan-glow-btn" title="Scan QR Code with Camera">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M3 7V5a2 2 0 0 1 2-2h2"></path>
+                                        <path d="M17 3h2a2 2 0 0 1 2 2v2"></path>
+                                        <path d="M21 17v2a2 2 0 0 1-2 2h-2"></path>
+                                        <path d="M3 17v2a2 2 0 0 1 2 2h2"></path>
+                                        <rect x="7" y="7" width="10" height="10" rx="1"></rect>
+                                    </svg>
+                                    <span>Scan QR</span>
+                                </button>
+                                <button id="join-btn" class="btn secondary-glow-btn">
+                                    <span>Join</span>
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2">
+                                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                                        <polyline points="12 5 19 12 12 19"></polyline>
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -175,6 +177,46 @@
                     </div>
                     
                     <p id="scanner-status" class="scanner-status-text">Position camera over QR code</p>
+                </div>
+            </div>
+
+            <!-- 4-CHARACTER CODE ENTRY POP-UP MODAL -->
+            <div id="code-modal" class="modal-overlay hidden">
+                <div class="code-modal-card">
+                    <div class="code-modal-header">
+                        <div class="flex-center gap-2">
+                            <div class="modal-icon-badge">
+                                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--accent-cyan)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                                </svg>
+                            </div>
+                            <h3 class="code-modal-title">Enter 4-Character Code</h3>
+                        </div>
+                        <button id="close-code-modal-btn" class="icon-button" title="Close">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div class="code-modal-body">
+                        <p class="code-modal-subtext">Type or paste the 4-character room code from your peer device</p>
+                        <div class="pin-inputs-container">
+                            <input type="text" id="pin-0" class="pin-box" maxlength="1" autocomplete="off" spellcheck="false" placeholder="-" />
+                            <input type="text" id="pin-1" class="pin-box" maxlength="1" autocomplete="off" spellcheck="false" placeholder="-" />
+                            <input type="text" id="pin-2" class="pin-box" maxlength="1" autocomplete="off" spellcheck="false" placeholder="-" />
+                            <input type="text" id="pin-3" class="pin-box" maxlength="1" autocomplete="off" spellcheck="false" placeholder="-" />
+                        </div>
+                        <button id="modal-join-btn" class="btn primary-glow-btn">
+                            <span>Join Session</span>
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2">
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                                <polyline points="12 5 19 12 12 19"></polyline>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
             </div>
 

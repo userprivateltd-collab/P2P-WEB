@@ -546,6 +546,11 @@ body {
     gap: 10px;
 }
 
+.input-action-buttons {
+    display: flex;
+    gap: 10px;
+}
+
 input[type="text"] {
     width: 100%;
     padding: 14px 16px;
@@ -559,6 +564,10 @@ input[type="text"] {
     letter-spacing: 2px;
     outline: none;
     transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+#room-input {
+    cursor: pointer;
 }
 
 input[type="text"]:focus {
@@ -944,6 +953,33 @@ input[type="text"]:focus {
     input[type="text"] {
         min-height: 48px;
     }
+
+    .input-action-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+
+    #room-input {
+        width: 100%;
+        text-align: center;
+        font-size: 1.25rem;
+        letter-spacing: 6px;
+        height: 52px;
+        padding: 0 16px;
+    }
+
+    .input-action-buttons {
+        display: flex;
+        gap: 10px;
+        width: 100%;
+    }
+
+    .input-action-buttons .btn {
+        flex: 1;
+        justify-content: center;
+        height: 48px;
+    }
 }
 
 /* =========================================================================
@@ -1075,6 +1111,104 @@ input[type="text"]:focus {
     font-size: 0.85rem;
     color: var(--text-muted);
     text-align: center;
+}
+
+/* =========================================================================
+   4-CHARACTER CODE ENTRY POP-UP MODAL STYLES
+   ========================================================================= */
+
+.code-modal-card {
+    width: 100%;
+    max-width: 420px;
+    background: rgba(14, 19, 31, 0.95);
+    border: 1px solid rgba(0, 198, 255, 0.3);
+    border-radius: var(--radius-xl);
+    padding: 26px;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.9), 0 0 35px rgba(0, 198, 255, 0.2);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    animation: modalPopIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes modalPopIn {
+    from { opacity: 0; transform: scale(0.92) translateY(10px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.code-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.modal-icon-badge {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-md);
+    background: rgba(0, 198, 255, 0.12);
+    border: 1px solid rgba(0, 198, 255, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.code-modal-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.code-modal-body {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    align-items: center;
+    width: 100%;
+}
+
+.code-modal-subtext {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.pin-inputs-container {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    width: 100%;
+    margin: 8px 0;
+}
+
+.pin-box {
+    width: 58px;
+    height: 64px;
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    font-family: var(--font-mono);
+    font-size: 1.6rem;
+    font-weight: 800;
+    color: var(--accent-cyan);
+    text-align: center;
+    text-transform: uppercase;
+    outline: none;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.pin-box:focus {
+    border-color: var(--accent-cyan);
+    background: rgba(0, 198, 255, 0.08);
+    box-shadow: 0 0 20px rgba(0, 198, 255, 0.35), 0 0 0 3px rgba(0, 198, 255, 0.2);
+    transform: translateY(-2px);
+}
+
+.pin-box.filled {
+    border-color: rgba(0, 198, 255, 0.5);
+    color: #ffffff;
+    background: rgba(0, 198, 255, 0.12);
 }
 
 /* =========================================================================
@@ -1287,6 +1421,21 @@ input[type="text"]:focus {
 @media (max-width: 600px) {
     .perf-metrics-grid {
         grid-template-columns: repeat(2, 1fr);
-        gap: 12px;
+        gap: 10px;
+    }
+
+    .metric-val {
+        font-size: 0.78rem;
+        white-space: nowrap;
+    }
+
+    .metric-label {
+        font-size: 0.65rem;
+    }
+
+    .pin-box {
+        width: 48px;
+        height: 56px;
+        font-size: 1.35rem;
     }
 }
