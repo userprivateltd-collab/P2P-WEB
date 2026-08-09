@@ -26,6 +26,10 @@ Designed with a modern dark-mode aesthetic featuring glassmorphism elements and 
 - **P2P & WebRTC:** [PeerJS](https://peerjs.com/) (Abstracts WebRTC signaling using PeerJS public cloud server)
 - **Deployment:** [Vercel](https://vercel.com) (`vercel.json` static configuration)
 
+- 
+<img width="1917" height="897" alt="Screenshot 2026-08-09 113157" src="https://github.com/user-attachments/assets/9a2d6f4f-5419-43cf-97db-1de475b5437a" />
+
 ---
 
 ## 🔒 Security Architecture (E2EE Pipeline)
+
