@@ -155,7 +155,7 @@ function initPeer(roomId) {
     const tempPeer = new Peer(peerConfig);
     
     tempPeer.on('open', (id) => {
-        const conn = tempPeer.connect(fullPeerId, { serialization: 'raw', reliable: true });
+        const conn = tempPeer.connect(fullPeerId);
         
         const connectTimeout = setTimeout(() => {
             if (!dataConnection) {
