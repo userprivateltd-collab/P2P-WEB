@@ -526,6 +526,11 @@ const transferEngine = {
         const canvas = document.getElementById('speed-graph-canvas');
         if (!canvas) return;
 
+        const parentWidth = canvas.parentElement ? canvas.parentElement.clientWidth : 400;
+        if (parentWidth > 0 && canvas.width !== parentWidth) {
+            canvas.width = parentWidth;
+        }
+
         const ctx = canvas.getContext('2d');
         const width = canvas.width;
         const height = canvas.height;
