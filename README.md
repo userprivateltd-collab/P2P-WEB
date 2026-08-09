@@ -1,4 +1,4 @@
-# ⚡ AirDrop Web (P2P Transfer with E2EE)
+# ⚡ Airodump Web (P2P Transfer with E2EE)
 
 AirDrop Web is a lightweight, zero-server peer-to-peer (P2P) file transfer application. Built with **Vanilla JavaScript**, **WebRTC**, and **PeerJS**, it allows direct device-to-device file streaming straight from the browser.
 
