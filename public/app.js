@@ -23,6 +23,7 @@ const progressBar = document.getElementById('progress-bar');
 const progressPercentage = document.getElementById('progress-percentage');
 const downloadContainer = document.getElementById('download-container');
 const downloadLink = document.getElementById('download-link');
+const reloadBtn = document.getElementById('reload-btn');
 
 let peer = null;
 let dataConnection = null;
@@ -331,6 +332,12 @@ copyBtn.addEventListener('click', () => {
     copyBtn.innerText = '✓';
     setTimeout(() => { copyBtn.innerText = '📋'; }, 2000);
 });
+
+if (reloadBtn) {
+    reloadBtn.addEventListener('click', () => {
+        window.location.reload();
+    });
+}
 
 function generateRoomCode() {
     const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
