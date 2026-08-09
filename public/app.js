@@ -182,12 +182,25 @@ function setupConnection(conn) {
             // Binary data (Encrypted ArrayBuffer)
             if (!sharedCryptoKey) return;
             
-            const payload = new Uint8Array(data);
-            const iv = payload.slice(0, 12);
-            const encryptedChunk = payload.slice(12);
-
             decryptionQueue = decryptionQueue.then(async () => {
                 try {
+                    let arrayBuffer;
+                    if (data instanceof Blob) {
+                        arrayBuffer = await data.arrayBuffer();
+                    } else if (data.buffer) {
+                        arrayBuffer = data.buffer;
+                    } else if (data instanceof ArrayBuffer) {
+                        arrayBuffer = data;
+                    } else {
+                        arrayBuffer = new Uint8Array(data).buffer;
+                    }
+
+                    const payload = new Uint8Array(arrayBuffer);
+                    if (payload.length <= 12) return;
+                    
+                    const iv = payload.slice(0, 12);
+                    const encryptedChunk = payload.slice(12);
+
                     const decryptedChunk = await window.crypto.subtle.decrypt(
                         { name: 'AES-GCM', iv: iv },
                         sharedCryptoKey,
@@ -318,6 +331,12 @@ function sendFile(file) {
     };
 
     const readSlice = (o) => {
+        // Apply backpressure if the WebRTC buffer is full (e.g. > 1MB)
+        if (dataConnection.dataChannel && dataConnection.dataChannel.bufferedAmount > 1024 * 1024) {
+            setTimeout(() => readSlice(o), 50);
+            return;
+        }
+
         const slice = file.slice(o, o + CHUNK_SIZE);
         reader.readAsArrayBuffer(slice);
     };
