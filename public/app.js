@@ -184,18 +184,14 @@ function setupConnection(conn) {
             
             decryptionQueue = decryptionQueue.then(async () => {
                 try {
-                    let arrayBuffer;
+                    let payload;
                     if (data instanceof Blob) {
-                        arrayBuffer = await data.arrayBuffer();
-                    } else if (data.buffer) {
-                        arrayBuffer = data.buffer;
-                    } else if (data instanceof ArrayBuffer) {
-                        arrayBuffer = data;
+                        payload = new Uint8Array(await data.arrayBuffer());
                     } else {
-                        arrayBuffer = new Uint8Array(data).buffer;
+                        // This safely handles ArrayBuffer and Uint8Array (including those with offsets)
+                        payload = new Uint8Array(data);
                     }
 
-                    const payload = new Uint8Array(arrayBuffer);
                     if (payload.length <= 12) return;
                     
                     const iv = payload.slice(0, 12);
