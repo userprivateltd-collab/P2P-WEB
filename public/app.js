@@ -704,37 +704,174 @@ function renderQRCode(code) {
     if (!qrBox || !canvas) return;
 
     qrBox.classList.remove('hidden');
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    ctx.fillStyle = '#0f172a';
-    const size = 160;
-    const cells = 21;
-    const cellSize = size / cells;
+    const joinUrl = `${window.location.origin}${window.location.pathname}?room=${code}`;
 
-    let hash = 0;
-    for (let i = 0; i < code.length; i++) hash = (hash << 5) - hash + code.charCodeAt(i);
-
-    function drawFinder(x, y) {
-        ctx.fillRect(x * cellSize, y * cellSize, 7 * cellSize, 7 * cellSize);
+    if (window.QRCode && window.QRCode.toCanvas) {
+        window.QRCode.toCanvas(canvas, joinUrl, {
+            width: 160,
+            margin: 1,
+            color: {
+                dark: '#0f172a',
+                light: '#ffffff'
+            }
+        }, function (error) {
+            if (error) console.error("[QR GENERATOR] Error:", error);
+        });
+    } else {
+        // Fallback simple renderer
+        const ctx = canvas.getContext('2d');
         ctx.fillStyle = '#ffffff';
-        ctx.fillRect((x + 1) * cellSize, (y + 1) * cellSize, 5 * cellSize, 5 * cellSize);
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = '#0f172a';
-        ctx.fillRect((x + 2) * cellSize, (y + 2) * cellSize, 3 * cellSize, 3 * cellSize);
-    }
-
-    drawFinder(0, 0);
-    drawFinder(14, 0);
-    drawFinder(0, 14);
-
-    for (let r = 0; r < cells; r++) {
-        for (let c = 0; c < cells; c++) {
-            if ((r < 8 && c < 8) || (r < 8 && c > 12) || (r > 12 && c < 8)) continue;
-            const bit = Math.abs(Math.sin(r * 12.9898 + c * 78.233 + hash) * 43758.5453) % 1;
-            if (bit > 0.45) {
-                ctx.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
+        const size = 160;
+        const cells = 21;
+        const cellSize = size / cells;
+        let hash = 0;
+        for (let i = 0; i < code.length; i++) hash = (hash << 5) - hash + code.charCodeAt(i);
+        function drawFinder(x, y) {
+            ctx.fillRect(x * cellSize, y * cellSize, 7 * cellSize, 7 * cellSize);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect((x + 1) * cellSize, (y + 1) * cellSize, 5 * cellSize, 5 * cellSize);
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect((x + 2) * cellSize, (y + 2) * cellSize, 3 * cellSize, 3 * cellSize);
+        }
+        drawFinder(0, 0);
+        drawFinder(14, 0);
+        drawFinder(0, 14);
+        for (let r = 0; r < cells; r++) {
+            for (let c = 0; c < cells; c++) {
+                if ((r < 8 && c < 8) || (r < 8 && c > 12) || (r > 12 && c < 8)) continue;
+                const bit = Math.abs(Math.sin(r * 12.9898 + c * 78.233 + hash) * 43758.5453) % 1;
+                if (bit > 0.45) {
+                    ctx.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
+                }
             }
         }
     }
 }
+
+// =========================================================================
+// CAMERA QR CODE SCANNER & AUTO-JOIN
+// =========================================================================
+
+let scannerStream = null;
+let scannerAnimId = null;
+
+const scanQrBtn = document.getElementById('scan-qr-btn');
+const scannerModal = document.getElementById('scanner-modal');
+const closeScannerBtn = document.getElementById('close-scanner-btn');
+const scannerVideo = document.getElementById('scanner-video');
+const scannerCanvas = document.getElementById('scanner-canvas');
+const scannerStatus = document.getElementById('scanner-status');
+
+if (scanQrBtn) {
+    scanQrBtn.addEventListener('click', startQRScanner);
+}
+
+if (closeScannerBtn) {
+    closeScannerBtn.addEventListener('click', stopQRScanner);
+}
+
+async function startQRScanner() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert('Camera access is not supported on your browser or requires HTTPS.');
+        return;
+    }
+
+    try {
+        scannerStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment' }
+        });
+        scannerVideo.srcObject = scannerStream;
+        await scannerVideo.play();
+
+        scannerModal.classList.remove('hidden');
+        if (scannerStatus) scannerStatus.innerText = 'Position camera over QR code';
+        scanFrameLoop();
+    } catch (err) {
+        console.error('[QR SCANNER] Camera permission error:', err);
+        alert('Could not access camera: ' + (err.message || 'Permission denied'));
+    }
+}
+
+function stopQRScanner() {
+    if (scannerAnimId) {
+        cancelAnimationFrame(scannerAnimId);
+        scannerAnimId = null;
+    }
+    if (scannerStream) {
+        scannerStream.getTracks().forEach(track => track.stop());
+        scannerStream = null;
+    }
+    if (scannerVideo) {
+        scannerVideo.srcObject = null;
+    }
+    if (scannerModal) {
+        scannerModal.classList.add('hidden');
+    }
+}
+
+function scanFrameLoop() {
+    if (!scannerVideo || scannerVideo.readyState !== scannerVideo.HAVE_ENOUGH_DATA) {
+        scannerAnimId = requestAnimationFrame(scanFrameLoop);
+        return;
+    }
+
+    const width = scannerVideo.videoWidth;
+    const height = scannerVideo.videoHeight;
+    scannerCanvas.width = width;
+    scannerCanvas.height = height;
+
+    const ctx = scannerCanvas.getContext('2d');
+    ctx.drawImage(scannerVideo, 0, 0, width, height);
+
+    const imageData = ctx.getImageData(0, 0, width, height);
+
+    if (window.jsQR) {
+        const code = window.jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: 'dontInvert'
+        });
+
+        if (code && code.data) {
+            console.log('[QR SCANNER] Scanned payload:', code.data);
+            let roomCode = code.data.trim();
+
+            try {
+                const parsedUrl = new URL(roomCode);
+                const paramRoom = parsedUrl.searchParams.get('room');
+                if (paramRoom) roomCode = paramRoom;
+            } catch (e) {
+                // Not a URL, use raw string
+            }
+
+            roomCode = roomCode.toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+            if (roomCode.length === 4) {
+                if (scannerStatus) scannerStatus.innerText = `Code Found: ${roomCode}! Connecting...`;
+                stopQRScanner();
+                roomInput.value = roomCode;
+                joinBtn.click();
+                return;
+            }
+        }
+    }
+
+    scannerAnimId = requestAnimationFrame(scanFrameLoop);
+}
+
+// Auto-join if user scanned QR code with native phone camera app
+window.addEventListener('DOMContentLoaded', () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const autoRoom = urlParams.get('room');
+    if (autoRoom) {
+        const cleanCode = autoRoom.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+        if (cleanCode.length === 4) {
+            roomInput.value = cleanCode;
+            console.log(`[AUTO-JOIN] Room parameter detected in URL: ${cleanCode}. Joining...`);
+            setTimeout(() => {
+                joinBtn.click();
+            }, 400);
+        }
+    }
+});
