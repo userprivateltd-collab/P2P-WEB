@@ -133,7 +133,17 @@ const peerConfig = {
             { urls: 'stun:stun1.l.google.com:19302' },
             { urls: 'stun:stun2.l.google.com:19302' },
             { urls: 'stun:stun3.l.google.com:19302' },
-            { urls: 'stun:stun4.l.google.com:19302' }
+            { urls: 'stun:stun4.l.google.com:19302' },
+            {
+                urls: [
+                    'turn:openrelay.metered.ca:80',
+                    'turn:openrelay.metered.ca:443',
+                    'turn:openrelay.metered.ca:443?transport=tcp',
+                    'turns:openrelay.metered.ca:443'
+                ],
+                username: 'openrelayproject',
+                credential: 'openrelayproject'
+            }
         ]
     }
 };
@@ -157,17 +167,28 @@ function initPeer(roomId) {
             }
         }, 20000); // 20 seconds for cross-network WebRTC STUN/ICE gathering
 
+        const runHandshake = async () => {
+            if (!myKeyPair) {
+                clearTimeout(connectTimeout);
+                roomStatus.innerText = 'Connected to peer! Negotiating E2EE...';
+                setupConnection(conn);
+                peer = tempPeer;
+                showTransferSection();
+                await startE2EEHandshake();
+            }
+        };
+
         conn.on('open', async () => {
-            clearTimeout(connectTimeout);
-            roomStatus.innerText = 'Connected to peer! Negotiating E2EE...';
-            setupConnection(conn);
-            peer = tempPeer;
-            showTransferSection();
-            await startE2EEHandshake();
-            
-            peer.on('error', (err) => console.error(err));
+            await runHandshake();
         });
         
+        // Backup trigger for mobile browsers where open event may fire instantaneously
+        setTimeout(async () => {
+            if (conn.open && !myKeyPair) {
+                await runHandshake();
+            }
+        }, 300);
+
         conn.on('error', (err) => {
             clearTimeout(connectTimeout);
             tempPeer.destroy();
@@ -202,12 +223,25 @@ function createRoom(roomId) {
         roomStatus.innerText = 'Peer joined! Negotiating E2EE...';
         setupConnection(conn);
         showTransferSection();
+
+        const runHandshake = async () => {
+            if (!myKeyPair) {
+                await startE2EEHandshake();
+            }
+        };
+
         if (conn.open) {
-            await startE2EEHandshake();
+            await runHandshake();
         } else {
             conn.on('open', async () => {
-                await startE2EEHandshake();
+                await runHandshake();
             });
+            // Backup check for mobile browsers where open event fires right before listener registration
+            setTimeout(async () => {
+                if (conn.open && !myKeyPair) {
+                    await runHandshake();
+                }
+            }, 300);
         }
     });
     
@@ -326,8 +360,12 @@ function setupConnection(conn) {
 }
 
 // UI Handlers
+roomInput.addEventListener('input', (e) => {
+    e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+});
+
 joinBtn.addEventListener('click', () => {
-    const roomId = roomInput.value.trim().toUpperCase();
+    const roomId = roomInput.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (roomId.length === 4) {
         joinBtn.disabled = true;
         createBtn.disabled = true;
