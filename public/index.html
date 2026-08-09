@@ -53,24 +53,29 @@
         </div>
 
         <div id="transfer-section" class="section hidden">
-            <div class="connection-status">
-                <span class="status-dot connected"></span> Connected to peer
+            <div class="transfer-top-bar">
+                <div class="connection-status">
+                    <span class="status-dot connected"></span> Connected to peer
+                </div>
+                <button class="reload-action-btn icon-btn" title="Reload Session">
+                    🔄 Reload
+                </button>
             </div>
             
             <div class="file-upload-wrapper">
-                <input type="file" id="file-input" class="file-input">
+                <input type="file" id="file-input" class="file-input" multiple>
                 <div class="upload-area" id="upload-area">
                     <svg viewBox="0 0 24 24" width="48" height="48" stroke="currentColor" stroke-width="2" fill="none">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                         <polyline points="17 8 12 3 7 8"></polyline>
                         <line x1="12" y1="3" x2="12" y2="15"></line>
                     </svg>
-                    <p>Drag & drop or click to select a file</p>
+                    <p>Drag & drop or click to select file(s)</p>
                     <span id="selected-file-name" class="file-name"></span>
                 </div>
             </div>
 
-            <button id="send-btn" class="primary-btn" disabled>Send File</button>
+            <button id="send-btn" class="primary-btn" disabled>Send File(s)</button>
             
             <div id="progress-container" class="hidden">
                 <div class="progress-info">
@@ -83,9 +88,12 @@
             </div>
 
             <div id="download-container" class="hidden mt-4">
-                <p>File received successfully!</p>
-                <a id="download-link" class="secondary-btn" download>Download File</a>
-                <button id="reload-btn" class="secondary-btn" style="margin-top: 10px;">🔄 Reload / New Session</button>
+                <p id="download-status-text">File(s) received successfully!</p>
+                <div id="download-list" class="download-list mt-4"></div>
+                <div class="action-buttons-group mt-4">
+                    <button id="send-another-btn" class="primary-btn">📁 Send Another File</button>
+                    <button class="reload-action-btn secondary-btn" style="margin-top: 10px;">🔄 Reload Session</button>
+                </div>
             </div>
         </div>
     </div>

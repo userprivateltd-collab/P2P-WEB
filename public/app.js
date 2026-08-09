@@ -11,6 +11,9 @@ const fileInput = document.getElementById('file-input');
 const uploadArea = document.getElementById('upload-area');
 const selectedFileName = document.getElementById('selected-file-name');
 const sendBtn = document.getElementById('send-btn');
+const sendAnotherBtn = document.getElementById('send-another-btn');
+const downloadList = document.getElementById('download-list');
+const downloadStatusText = document.getElementById('download-status-text');
 
 const createBtn = document.getElementById('create-btn');
 const createdCodeContainer = document.getElementById('created-code-container');
@@ -22,12 +25,10 @@ const progressText = document.getElementById('progress-text');
 const progressBar = document.getElementById('progress-bar');
 const progressPercentage = document.getElementById('progress-percentage');
 const downloadContainer = document.getElementById('download-container');
-const downloadLink = document.getElementById('download-link');
-const reloadBtn = document.getElementById('reload-btn');
 
 let peer = null;
 let dataConnection = null;
-let fileToSend = null;
+let filesToTransfer = [];
 
 // E2EE State
 let myKeyPair = null;
@@ -53,6 +54,14 @@ let expectedChunks = 0;  // DEBUG: total chunks sender will send
 let receivedChunks = 0; // DEBUG: how many chunks receiver has decrypted
 
 const APP_PREFIX = 'airdrop-web-p2p-';
+
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
 
 // --- Crypto Functions ---
 
@@ -111,7 +120,7 @@ function checkE2EEComplete() {
         if (handshakeResolve) {
             handshakeResolve();
         }
-        if (fileToSend && dataConnection && dataConnection.open) {
+        if (filesToTransfer.length > 0 && dataConnection && dataConnection.open) {
             sendBtn.disabled = false;
         }
     }
@@ -226,41 +235,32 @@ function setupConnection(conn) {
                     receivedSize = 0;
                     receivedChunks = 0;
                     expectedChunks = meta.totalChunks || 0;
-                    console.log(`[RECEIVER] file-start: name=${meta.name}, size=${meta.size}, expectedChunks=${meta.totalChunks}`);
+                    console.log(`[RECEIVER] file-start: name=${meta.name}, size=${meta.size}, fileIndex=${meta.fileIndex + 1}/${meta.totalFiles}`);
                     
                     progressContainer.classList.remove('hidden');
-                    downloadContainer.classList.add('hidden');
-                    progressText.innerText = 'Receiving...';
+                    progressText.innerText = `Receiving (${(meta.fileIndex || 0) + 1}/${meta.totalFiles || 1}): ${meta.name}`;
                     updateProgress(0);
                 });
             } else if (meta.type === 'file-end') {
                 decryptionQueue.then(async () => {
                     await handshakePromise;
-                    console.log(`[RECEIVER] file-end received. Waiting for decryptionQueue to flush...`);
-                    console.log(`[RECEIVER] Queue flushed. Chunks stored: ${incomingFileData.length}, totalBytes: ${receivedSize}`);
+                    console.log(`[RECEIVER] file-end received for ${incomingFileInfo.name}.`);
                     saveReceivedFile();
                 });
             }
         } else {
             // Binary data (Encrypted ArrayBuffer)
-            // Queue chunk and wait for handshake to complete before decrypting
             decryptionQueue = decryptionQueue.then(async () => {
-                await handshakePromise; // Wait for E2EE COMPLETE
+                await handshakePromise;
                 try {
                     let payload;
                     if (data instanceof Blob) {
                         payload = new Uint8Array(await data.arrayBuffer());
                     } else {
-                        // This safely handles ArrayBuffer and Uint8Array (including those with offsets)
                         payload = new Uint8Array(data);
                     }
 
-                    console.log(`[RECEIVER] Binary chunk #${receivedChunks}: dataType=${data.constructor.name}, payloadBytes=${payload.length}`);
-
-                    if (payload.length <= 12) {
-                        console.error(`[RECEIVER] Chunk #${receivedChunks} too small to decrypt (${payload.length} bytes), skipping.`);
-                        return;
-                    }
+                    if (payload.length <= 12) return;
                     
                     const iv = payload.slice(0, 12);
                     const encryptedChunk = payload.slice(12);
@@ -273,7 +273,6 @@ function setupConnection(conn) {
                     incomingFileData.push(decryptedChunk);
                     receivedChunks++;
                     receivedSize += decryptedChunk.byteLength;
-                    console.log(`[RECEIVER] Chunk #${receivedChunks} decrypted: ${decryptedChunk.byteLength} bytes, totalReceived=${receivedSize}`);
                     
                     const percentage = Math.round((receivedSize / incomingFileInfo.size) * 100);
                     updateProgress(percentage);
@@ -333,9 +332,17 @@ copyBtn.addEventListener('click', () => {
     setTimeout(() => { copyBtn.innerText = '📋'; }, 2000);
 });
 
-if (reloadBtn) {
-    reloadBtn.addEventListener('click', () => {
+document.querySelectorAll('.reload-action-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
         window.location.reload();
+    });
+});
+
+if (sendAnotherBtn) {
+    sendAnotherBtn.addEventListener('click', () => {
+        resetFileSelection();
+        progressContainer.classList.add('hidden');
+        fileInput.click();
     });
 }
 
@@ -350,8 +357,14 @@ function generateRoomCode() {
 
 fileInput.addEventListener('change', (e) => {
     if (e.target.files.length > 0) {
-        fileToSend = e.target.files[0];
-        selectedFileName.innerText = fileToSend.name;
+        filesToTransfer = Array.from(e.target.files);
+        if (filesToTransfer.length === 1) {
+            selectedFileName.innerText = `${filesToTransfer[0].name} (${formatBytes(filesToTransfer[0].size)})`;
+        } else {
+            const totalSize = filesToTransfer.reduce((sum, f) => sum + f.size, 0);
+            selectedFileName.innerText = `${filesToTransfer.length} files selected (${formatBytes(totalSize)} total):\n` +
+                filesToTransfer.map(f => f.name).join(', ');
+        }
         selectedFileName.style.display = 'block';
         uploadArea.querySelector('p').style.display = 'none';
         uploadArea.querySelector('svg').style.display = 'none';
@@ -363,116 +376,142 @@ fileInput.addEventListener('change', (e) => {
 });
 
 sendBtn.addEventListener('click', () => {
-    if (fileToSend && dataConnection && dataConnection.open && sharedCryptoKey && localE2EEReady && remoteE2EEReady) {
-        sendFile(fileToSend);
+    if (filesToTransfer.length > 0 && dataConnection && dataConnection.open && sharedCryptoKey && localE2EEReady && remoteE2EEReady) {
+        sendBatchFiles();
     }
 });
 
-// File Transfer Logic
-function sendFile(file) {
-    if (!dataConnection || !dataConnection.open || !sharedCryptoKey || !localE2EEReady || !remoteE2EEReady) {
-        console.error('[SENDER] Cannot send file before E2EE COMPLETE');
+function sendSingleFile(file, fileIndex, totalFiles) {
+    return new Promise((resolve, reject) => {
+        const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+        console.log(`[SENDER] Starting transfer [${fileIndex + 1}/${totalFiles}]: name=${file.name}, size=${file.size}, totalChunks=${totalChunks}`);
+        
+        progressText.innerText = `Sending (${fileIndex + 1}/${totalFiles}): ${file.name}`;
+        updateProgress(0);
+
+        dataConnection.send(JSON.stringify({
+            type: 'file-start',
+            name: file.name,
+            size: file.size,
+            fileType: file.type,
+            totalChunks: totalChunks,
+            fileIndex: fileIndex,
+            totalFiles: totalFiles
+        }));
+
+        let offset = 0;
+        let chunkIndex = 0;
+        const reader = new FileReader();
+
+        reader.onerror = error => reject(error);
+        reader.onabort = () => reject(new Error('Aborted'));
+
+        reader.onload = async (e) => {
+            const rawChunk = e.target.result;
+            const iv = window.crypto.getRandomValues(new Uint8Array(12));
+            try {
+                const encryptedChunk = await window.crypto.subtle.encrypt(
+                    { name: 'AES-GCM', iv: iv },
+                    sharedCryptoKey,
+                    rawChunk
+                );
+
+                const payload = new Uint8Array(iv.length + encryptedChunk.byteLength);
+                payload.set(iv, 0);
+                payload.set(new Uint8Array(encryptedChunk), iv.length);
+
+                dataConnection.send(payload.buffer);
+                chunkIndex++;
+
+                offset += rawChunk.byteLength;
+                const percentage = Math.round((offset / file.size) * 100);
+                updateProgress(percentage);
+
+                if (offset < file.size) {
+                    setTimeout(() => readSlice(offset), 0);
+                } else {
+                    console.log(`[SENDER] All ${chunkIndex} chunks sent for ${file.name}. Sending file-end.`);
+                    dataConnection.send(JSON.stringify({
+                        type: 'file-end',
+                        fileIndex: fileIndex,
+                        totalFiles: totalFiles
+                    }));
+                    resolve();
+                }
+            } catch (err) {
+                console.error("Encryption failed", err);
+                reject(err);
+            }
+        };
+
+        const readSlice = (o) => {
+            if (dataConnection.dataChannel && dataConnection.dataChannel.bufferedAmount > 1024 * 1024) {
+                setTimeout(() => readSlice(o), 50);
+                return;
+            }
+            const slice = file.slice(o, o + CHUNK_SIZE);
+            reader.readAsArrayBuffer(slice);
+        };
+
+        readSlice(0);
+    });
+}
+
+async function sendBatchFiles() {
+    if (!filesToTransfer.length || !dataConnection || !dataConnection.open || !sharedCryptoKey || !localE2EEReady || !remoteE2EEReady) {
         return;
     }
+
     sendBtn.disabled = true;
     fileInput.disabled = true;
     progressContainer.classList.remove('hidden');
-    progressText.innerText = 'Sending...';
-    
-    // Send meta with totalChunks so receiver can verify
-    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-    console.log(`[SENDER] Starting transfer: name=${file.name}, size=${file.size}, totalChunks=${totalChunks}`);
-    dataConnection.send(JSON.stringify({
-        type: 'file-start',
-        name: file.name,
-        size: file.size,
-        fileType: file.type,
-        totalChunks: totalChunks
-    }));
 
-    let offset = 0;
-    let chunkIndex = 0;
-    const reader = new FileReader();
-    
-    reader.onerror = error => console.error('Error reading file:', error);
-    reader.onabort = () => console.log('File reading aborted');
-    
-    reader.onload = async (e) => {
-        const rawChunk = e.target.result;
-        
-        // Encrypt chunk
-        const iv = window.crypto.getRandomValues(new Uint8Array(12));
-        try {
-            const encryptedChunk = await window.crypto.subtle.encrypt(
-                { name: 'AES-GCM', iv: iv },
-                sharedCryptoKey,
-                rawChunk
-            );
-            
-            // Append IV to encrypted data
-            const payload = new Uint8Array(iv.length + encryptedChunk.byteLength);
-            payload.set(iv, 0);
-            payload.set(new Uint8Array(encryptedChunk), iv.length);
-
-            console.log(`[SENDER] Sending chunk #${chunkIndex}: rawBytes=${rawChunk.byteLength}, payloadBytes=${payload.buffer.byteLength}`);
-            // Send the ArrayBuffer directly for maximum PeerJS compatibility
-            dataConnection.send(payload.buffer);
-            chunkIndex++;
-            
-            offset += rawChunk.byteLength;
-            const percentage = Math.round((offset / file.size) * 100);
-            updateProgress(percentage);
-
-            if (offset < file.size) {
-                // Throttle slightly to prevent memory overwhelming on fast local networks with large files + encryption overhead
-                setTimeout(() => readSlice(offset), 0);
-            } else {
-                console.log(`[SENDER] All ${chunkIndex} chunks sent. Sending file-end.`);
-                dataConnection.send(JSON.stringify({ type: 'file-end' }));
-                progressText.innerText = 'Sent successfully!';
-                sendBtn.disabled = false;
-                fileInput.disabled = false;
-                
-                setTimeout(() => {
-                    progressContainer.classList.add('hidden');
-                    resetFileSelection();
-                }, 3000);
-            }
-        } catch (err) {
-            console.error("Encryption failed", err);
+    try {
+        for (let i = 0; i < filesToTransfer.length; i++) {
+            await sendSingleFile(filesToTransfer[i], i, filesToTransfer.length);
         }
-    };
-
-    const readSlice = (o) => {
-        // Apply backpressure if the WebRTC buffer is full (e.g. > 1MB)
-        if (dataConnection.dataChannel && dataConnection.dataChannel.bufferedAmount > 1024 * 1024) {
-            setTimeout(() => readSlice(o), 50);
-            return;
+        progressText.innerText = `All ${filesToTransfer.length} file(s) sent successfully!`;
+        downloadContainer.classList.remove('hidden');
+        if (downloadStatusText) {
+            downloadStatusText.innerText = `Sent ${filesToTransfer.length} file(s) successfully!`;
         }
-
-        const slice = file.slice(o, o + CHUNK_SIZE);
-        reader.readAsArrayBuffer(slice);
-    };
-
-    readSlice(0);
+    } catch (err) {
+        console.error('Batch transfer error:', err);
+        progressText.innerText = 'Transfer failed!';
+    } finally {
+        sendBtn.disabled = false;
+        fileInput.disabled = false;
+    }
 }
 
 function saveReceivedFile() {
     const blob = new Blob(incomingFileData, { type: incomingFileInfo.fileType });
     const url = URL.createObjectURL(blob);
     
-    progressText.innerText = 'Received successfully!';
     downloadContainer.classList.remove('hidden');
-    downloadLink.href = url;
-    downloadLink.download = incomingFileInfo.name;
-    downloadLink.innerText = `Download ${incomingFileInfo.name}`;
+    
+    if (downloadList) {
+        const item = document.createElement('a');
+        item.className = 'download-item-btn';
+        item.href = url;
+        item.download = incomingFileInfo.name;
+        item.innerHTML = `<span>📄 ${incomingFileInfo.name} (${formatBytes(incomingFileInfo.size)})</span><span>⬇️ Download</span>`;
+        downloadList.appendChild(item);
+    }
+
+    const currentFileNum = (incomingFileInfo.fileIndex || 0) + 1;
+    const totalFiles = incomingFileInfo.totalFiles || 1;
+
+    if (downloadStatusText) {
+        if (currentFileNum === totalFiles) {
+            downloadStatusText.innerText = `All ${totalFiles} file(s) received successfully!`;
+            progressText.innerText = 'Received successfully!';
+        } else {
+            downloadStatusText.innerText = `Received ${currentFileNum} of ${totalFiles} file(s)...`;
+        }
+    }
     
     fileInput.disabled = false;
-    
-    setTimeout(() => {
-        progressContainer.classList.add('hidden');
-        resetFileSelection();
-    }, 5000);
 }
 
 function updateProgress(percentage) {
@@ -490,9 +529,10 @@ function showTransferSection() {
 }
 
 function resetFileSelection() {
-    fileToSend = null;
+    filesToTransfer = [];
     fileInput.value = '';
     selectedFileName.style.display = 'none';
+    selectedFileName.innerText = '';
     uploadArea.querySelector('p').style.display = 'block';
     uploadArea.querySelector('svg').style.display = 'block';
     sendBtn.disabled = true;
@@ -500,9 +540,14 @@ function resetFileSelection() {
 
 function resetTransferState() {
     joinBtn.disabled = false;
+    createBtn.disabled = false;
     resetFileSelection();
     progressContainer.classList.add('hidden');
     downloadContainer.classList.add('hidden');
+    if (downloadList) downloadList.innerHTML = '';
     updateProgress(0);
+    localE2EEReady = false;
+    remoteE2EEReady = false;
+    sharedCryptoKey = null;
     document.querySelector('.connection-status').innerHTML = '<span class="status-dot connected"></span> Connected to peer';
 }
