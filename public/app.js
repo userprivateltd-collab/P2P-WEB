@@ -109,8 +109,104 @@ async function startE2EEHandshake() {
     console.log('[HANDSHAKE] Public key sent');
 }
 
+// =========================================================================
+// ICE / STUN / TURN CONFIGURATION
+// Fill in your TURN server details below to enable mobile-to-mobile and
+// mobile-to-laptop connections across cellular / Symmetric NAT firewalls.
+// =========================================================================
+const TURN_CONFIG = {
+    url: "",        // e.g. "turn:your-turn-server.com:3478" or "turns:your-turn-server.com:443"
+    username: "",   // e.g. "your-username"
+    credential: ""  // e.g. "your-password"
+};
+
+function getIceServers() {
+    const servers = [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' }
+    ];
+
+    if (TURN_CONFIG.url && TURN_CONFIG.username && TURN_CONFIG.credential) {
+        servers.push({
+            urls: TURN_CONFIG.url,
+            username: TURN_CONFIG.username,
+            credential: TURN_CONFIG.credential
+        });
+    }
+
+    return servers;
+}
+
+const peerConfig = {
+    config: {
+        iceServers: getIceServers()
+    }
+};
+
+function setupPeerConnectionLogging(conn) {
+    console.log('[NET] Peer connection created');
+
+    const checkPC = setInterval(() => {
+        const pc = conn.peerConnection || conn._peerConnection;
+        if (pc) {
+            clearInterval(checkPC);
+
+            console.log(`[WEBRTC] connectionState=${pc.connectionState || 'new'}`);
+            console.log(`[WEBRTC] iceConnectionState=${pc.iceConnectionState || 'new'}`);
+            console.log(`[WEBRTC] iceGatheringState=${pc.iceGatheringState || 'new'}`);
+            console.log(`[WEBRTC] signalingState=${pc.signalingState || 'stable'}`);
+
+            pc.addEventListener('icecandidate', (event) => {
+                if (event.candidate) {
+                    const cand = event.candidate.candidate;
+                    let type = 'unknown';
+                    if (cand.includes('typ host')) type = 'host';
+                    else if (cand.includes('typ srflx')) type = 'srflx (STUN)';
+                    else if (cand.includes('typ relay')) type = 'relay (TURN)';
+                    console.log(`[ICE CANDIDATE] type=${type} -> ${cand}`);
+                }
+            });
+
+            pc.addEventListener('icecandidateerror', (event) => {
+                console.error(`[ICE ERROR] code=${event.errorCode} url=${event.url} text=${event.errorText}`);
+            });
+
+            pc.addEventListener('iceconnectionstatechange', () => {
+                const state = pc.iceConnectionState;
+                console.log(`[ICE] ${state}`);
+                console.log(`[WEBRTC] iceConnectionState=${state}`);
+                if (state === 'connected' || state === 'completed') {
+                    checkE2EEComplete();
+                }
+            });
+
+            pc.addEventListener('connectionstatechange', () => {
+                console.log(`[WEBRTC] connectionState=${pc.connectionState}`);
+            });
+
+            pc.addEventListener('icegatheringstatechange', () => {
+                console.log(`[ICE] ${pc.iceGatheringState}`);
+                console.log(`[WEBRTC] iceGatheringState=${pc.iceGatheringState}`);
+            });
+
+            pc.addEventListener('signalingstatechange', () => {
+                console.log(`[WEBRTC] signalingState=${pc.signalingState}`);
+            });
+        }
+    }, 50);
+
+    setTimeout(() => clearInterval(checkPC), 15000);
+}
+
 function checkE2EEComplete() {
-    if (sharedCryptoKey && localE2EEReady && remoteE2EEReady) {
+    const pc = dataConnection ? (dataConnection.peerConnection || dataConnection._peerConnection) : null;
+    const iceState = pc ? pc.iceConnectionState : 'unknown';
+    const isIceConnected = !pc || iceState === 'connected' || iceState === 'completed' || iceState === 'new';
+
+    if (sharedCryptoKey && localE2EEReady && remoteE2EEReady && dataConnection && dataConnection.open && isIceConnected) {
         console.log('[HANDSHAKE] E2EE COMPLETE');
         roomStatus.innerText = 'Connected & E2EE Secured 🔒';
         const connStatusEl = document.querySelector('.connection-status');
@@ -120,33 +216,11 @@ function checkE2EEComplete() {
         if (handshakeResolve) {
             handshakeResolve();
         }
-        if (filesToTransfer.length > 0 && dataConnection && dataConnection.open) {
+        if (filesToTransfer.length > 0) {
             sendBtn.disabled = false;
         }
     }
 }
-
-const peerConfig = {
-    config: {
-        iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
-            { urls: 'stun:stun2.l.google.com:19302' },
-            { urls: 'stun:stun3.l.google.com:19302' },
-            { urls: 'stun:stun4.l.google.com:19302' },
-            {
-                urls: [
-                    'turn:openrelay.metered.ca:80',
-                    'turn:openrelay.metered.ca:443',
-                    'turn:openrelay.metered.ca:443?transport=tcp',
-                    'turns:openrelay.metered.ca:443'
-                ],
-                username: 'openrelayproject',
-                credential: 'openrelayproject'
-            }
-        ]
-    }
-};
 
 // --- PeerJS Logic ---
 
@@ -155,7 +229,9 @@ function initPeer(roomId) {
     const tempPeer = new Peer(peerConfig);
     
     tempPeer.on('open', (id) => {
+        console.log('[NET] Peer open');
         const conn = tempPeer.connect(fullPeerId);
+        setupPeerConnectionLogging(conn);
         
         const connectTimeout = setTimeout(() => {
             if (!dataConnection) {
@@ -165,7 +241,7 @@ function initPeer(roomId) {
                 joinBtn.disabled = false;
                 createBtn.disabled = false;
             }
-        }, 20000); // 20 seconds for cross-network WebRTC STUN/ICE gathering
+        }, 30000); // 30 seconds for WebRTC ICE negotiation
 
         const runHandshake = async () => {
             if (!myKeyPair) {
@@ -212,6 +288,7 @@ function createRoom(roomId) {
     peer = new Peer(fullPeerId, peerConfig);
     
     peer.on('open', (id) => {
+        console.log('[NET] Peer open');
         console.log('Room created with ID:', id);
     });
     
@@ -220,6 +297,7 @@ function createRoom(roomId) {
             conn.close();
             return;
         }
+        setupPeerConnectionLogging(conn);
         roomStatus.innerText = 'Peer joined! Negotiating E2EE...';
         setupConnection(conn);
         showTransferSection();
