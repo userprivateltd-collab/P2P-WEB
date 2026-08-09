@@ -472,6 +472,7 @@ async function sendBatchFiles() {
         }
         progressText.innerText = `All ${filesToTransfer.length} file(s) sent successfully!`;
         downloadContainer.classList.remove('hidden');
+        if (sendAnotherBtn) sendAnotherBtn.classList.remove('hidden');
         if (downloadStatusText) {
             downloadStatusText.innerText = `Sent ${filesToTransfer.length} file(s) successfully!`;
         }
@@ -489,6 +490,7 @@ function saveReceivedFile() {
     const url = URL.createObjectURL(blob);
     
     downloadContainer.classList.remove('hidden');
+    if (sendAnotherBtn) sendAnotherBtn.classList.remove('hidden');
     
     if (downloadList) {
         const item = document.createElement('a');
@@ -521,6 +523,8 @@ function updateProgress(percentage) {
 
 function showTransferSection() {
     roomSection.classList.remove('active');
+    const glassContainer = document.querySelector('.glass-container');
+    if (glassContainer) glassContainer.classList.add('wide');
     setTimeout(() => {
         roomSection.classList.add('hidden');
         transferSection.classList.remove('hidden');
@@ -549,5 +553,7 @@ function resetTransferState() {
     localE2EEReady = false;
     remoteE2EEReady = false;
     sharedCryptoKey = null;
+    const glassContainer = document.querySelector('.glass-container');
+    if (glassContainer) glassContainer.classList.remove('wide');
     document.querySelector('.connection-status').innerHTML = '<span class="status-dot connected"></span> Connected to peer';
 }

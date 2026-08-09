@@ -62,37 +62,43 @@
                 </button>
             </div>
             
-            <div class="file-upload-wrapper">
-                <input type="file" id="file-input" class="file-input" multiple>
-                <div class="upload-area" id="upload-area">
-                    <svg viewBox="0 0 24 24" width="48" height="48" stroke="currentColor" stroke-width="2" fill="none">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                        <polyline points="17 8 12 3 7 8"></polyline>
-                        <line x1="12" y1="3" x2="12" y2="15"></line>
-                    </svg>
-                    <p>Drag & drop or click to select file(s)</p>
-                    <span id="selected-file-name" class="file-name"></span>
-                </div>
-            </div>
+            <div class="transfer-grid">
+                <!-- Left Panel: Upload, Progress & Downloads -->
+                <div class="transfer-left-col">
+                    <div class="file-upload-wrapper">
+                        <input type="file" id="file-input" class="file-input" multiple>
+                        <div class="upload-area" id="upload-area">
+                            <svg viewBox="0 0 24 24" width="40" height="40" stroke="currentColor" stroke-width="2" fill="none">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                            </svg>
+                            <p>Drag & drop or click to select file(s)</p>
+                            <span id="selected-file-name" class="file-name"></span>
+                        </div>
+                    </div>
 
-            <button id="send-btn" class="primary-btn" disabled>Send File(s)</button>
-            
-            <div id="progress-container" class="hidden">
-                <div class="progress-info">
-                    <span id="progress-text">Sending...</span>
-                    <span id="progress-percentage">0%</span>
-                </div>
-                <div class="progress-bar-bg">
-                    <div id="progress-bar" class="progress-bar-fill"></div>
-                </div>
-            </div>
+                    <div id="progress-container" class="hidden">
+                        <div class="progress-info">
+                            <span id="progress-text">Sending...</span>
+                            <span id="progress-percentage">0%</span>
+                        </div>
+                        <div class="progress-bar-bg">
+                            <div id="progress-bar" class="progress-bar-fill"></div>
+                        </div>
+                    </div>
 
-            <div id="download-container" class="hidden mt-4">
-                <p id="download-status-text">File(s) received successfully!</p>
-                <div id="download-list" class="download-list mt-4"></div>
-                <div class="action-buttons-group mt-4">
-                    <button id="send-another-btn" class="primary-btn">📁 Send Another File</button>
-                    <button class="reload-action-btn secondary-btn" style="margin-top: 10px;">🔄 Reload Session</button>
+                    <div id="download-container" class="hidden mt-4">
+                        <p id="download-status-text">File(s) received successfully!</p>
+                        <div id="download-list" class="download-list mt-4"></div>
+                    </div>
+                </div>
+
+                <!-- Right Panel: Controls & Buttons -->
+                <div class="transfer-right-col">
+                    <button id="send-btn" class="primary-btn" disabled>Send File(s)</button>
+                    <button id="send-another-btn" class="secondary-btn hidden">📁 Send Another File</button>
+                    <button class="reload-action-btn secondary-btn">🔄 Reload Session</button>
                 </div>
             </div>
         </div>
