@@ -220,14 +220,68 @@
                             </div>
                         </div>
 
-                        <!-- Progress Bar -->
+                        <!-- Real-Time Transfer Progress & Performance Card -->
                         <div id="progress-container" class="progress-panel hidden">
-                            <div class="progress-header">
-                                <span id="progress-text" class="progress-title">Transferring...</span>
-                                <span id="progress-percentage" class="progress-num">0%</span>
+                            <div class="perf-card-header">
+                                <div class="file-direction-badge" id="perf-direction">
+                                    <span class="direction-icon" id="perf-dir-icon">↑</span>
+                                    <span class="direction-text" id="perf-dir-text">Sending</span>
+                                </div>
+                                <div class="perf-conn-pill direct" id="perf-conn-pill">
+                                    <span class="conn-dot"></span>
+                                    <span id="perf-conn-type">Direct P2P</span>
+                                </div>
                             </div>
-                            <div class="progress-track">
-                                <div id="progress-bar" class="progress-fill"></div>
+
+                            <div class="perf-file-row">
+                                <div class="perf-file-icon">
+                                    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                        <polyline points="14 2 14 8 20 8"></polyline>
+                                    </svg>
+                                </div>
+                                <div class="perf-file-meta">
+                                    <span id="perf-file-name" class="perf-file-name" title="filename.ext">filename.ext</span>
+                                    <span id="perf-file-sub" class="perf-file-sub">0 B • binary</span>
+                                </div>
+                                <button id="cancel-transfer-btn" class="cancel-btn" title="Cancel Transfer">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                    <span>Cancel</span>
+                                </button>
+                            </div>
+
+                            <div class="perf-bar-wrapper">
+                                <div class="progress-track">
+                                    <div id="progress-bar" class="progress-fill"></div>
+                                </div>
+                                <span id="progress-percentage" class="perf-large-percent">0.0%</span>
+                            </div>
+
+                            <div class="perf-metrics-grid">
+                                <div class="metric-box">
+                                    <span class="metric-label">Transferred / Total</span>
+                                    <span id="perf-size" class="metric-val">0 B / 0 B</span>
+                                </div>
+                                <div class="metric-box">
+                                    <span class="metric-label">Current Speed</span>
+                                    <span id="perf-speed-primary" class="metric-val highlight">0.00 MB/s</span>
+                                    <span id="perf-speed-secondary" class="metric-sub">0.00 Mbps</span>
+                                </div>
+                                <div class="metric-box">
+                                    <span class="metric-label">Average Speed</span>
+                                    <span id="perf-avg-speed" class="metric-val">0.00 MB/s</span>
+                                </div>
+                                <div class="metric-box">
+                                    <span class="metric-label">ETA</span>
+                                    <span id="perf-eta" class="metric-val">Calculating...</span>
+                                </div>
+                            </div>
+
+                            <div class="perf-graph-container">
+                                <canvas id="speed-graph-canvas" width="400" height="50"></canvas>
                             </div>
                         </div>
 

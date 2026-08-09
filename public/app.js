@@ -345,6 +345,301 @@ function createRoom(roomId) {
     });
 }
 
+// =========================================================================
+// REAL-TIME PERFORMANCE MONITOR & TRANSFER ENGINE
+// =========================================================================
+
+const transferEngine = {
+    active: false,
+    direction: 'idle', // 'sending' | 'receiving'
+    fileName: '',
+    fileSize: 0,
+    fileType: '',
+    bytesTransferred: 0,
+    startTime: 0,
+    samples: [],
+    speedHistory: new Array(30).fill(0),
+    timerId: null,
+    perfLogTimerId: null,
+    connectionType: 'Direct P2P',
+    isCancelled: false,
+
+    start(dir, name, size, type) {
+        this.active = true;
+        this.direction = dir;
+        this.fileName = name;
+        this.fileSize = size;
+        this.fileType = type || 'application/octet-stream';
+        this.bytesTransferred = 0;
+        this.startTime = performance.now();
+        this.samples = [{ time: this.startTime, bytes: 0 }];
+        this.speedHistory = new Array(30).fill(0);
+        this.isCancelled = false;
+
+        this.detectConnectionType();
+        this.renderInitialUI();
+
+        if (this.timerId) clearInterval(this.timerId);
+        // Throttled UI update loop: 10 Hz (100ms interval)
+        this.timerId = setInterval(() => this.tick(), 100);
+
+        if (this.perfLogTimerId) clearInterval(this.perfLogTimerId);
+        // Periodic console debug logger: 1 Hz (1000ms interval)
+        this.perfLogTimerId = setInterval(() => this.logPerf(), 1000);
+    },
+
+    updateBytes(bytes) {
+        this.bytesTransferred = bytes;
+    },
+
+    detectConnectionType() {
+        const pc = dataConnection ? (dataConnection.peerConnection || dataConnection._peerConnection) : null;
+        if (!pc) return;
+
+        if (pc.getStats) {
+            pc.getStats().then(stats => {
+                let isRelay = false;
+                stats.forEach(report => {
+                    if (report.type === 'candidate-pair' && (report.state === 'succeeded' || report.selected)) {
+                        const localCand = stats.get(report.localCandidateId);
+                        const remoteCand = stats.get(report.remoteCandidateId);
+                        if ((localCand && localCand.candidateType === 'relay') || (remoteCand && remoteCand.candidateType === 'relay')) {
+                            isRelay = true;
+                        }
+                    }
+                });
+                this.connectionType = isRelay ? 'TURN Relay' : 'Direct P2P';
+                this.updateConnPill();
+            }).catch(() => {});
+        }
+    },
+
+    updateConnPill() {
+        const connTypeEl = document.getElementById('perf-conn-type');
+        const connPill = document.getElementById('perf-conn-pill');
+        if (connTypeEl) connTypeEl.innerText = this.connectionType;
+        if (connPill) {
+            if (this.connectionType.includes('Relay')) {
+                connPill.className = 'perf-conn-pill relay';
+            } else {
+                connPill.className = 'perf-conn-pill direct';
+            }
+        }
+    },
+
+    tick() {
+        if (!this.active) return;
+
+        const now = performance.now();
+        const elapsedSec = (now - this.startTime) / 1000;
+
+        // Add sample to rolling window
+        this.samples.push({ time: now, bytes: this.bytesTransferred });
+
+        // Keep samples from last 1000ms (rolling window)
+        while (this.samples.length > 1 && (now - this.samples[0].time) > 1000) {
+            this.samples.shift();
+        }
+
+        // Rolling speed calculation
+        let currentSpeedBytesPerSec = 0;
+        if (this.samples.length > 1) {
+            const oldest = this.samples[0];
+            const timeDiff = (now - oldest.time) / 1000;
+            const bytesDiff = this.bytesTransferred - oldest.bytes;
+            if (timeDiff > 0) currentSpeedBytesPerSec = bytesDiff / timeDiff;
+        }
+
+        const currentMBs = currentSpeedBytesPerSec / (1024 * 1024);
+        const currentMbps = (currentSpeedBytesPerSec * 8) / 1000000;
+
+        // Average speed calculation
+        const avgSpeedBytesPerSec = elapsedSec > 0 ? (this.bytesTransferred / elapsedSec) : 0;
+        const avgMBs = avgSpeedBytesPerSec / (1024 * 1024);
+
+        // Accurate percentage derived strictly from bytes
+        const percent = this.fileSize > 0 ? Math.min(100, (this.bytesTransferred / this.fileSize) * 100) : 0;
+
+        // ETA calculation
+        const remainingBytes = Math.max(0, this.fileSize - this.bytesTransferred);
+        let etaText = 'Calculating...';
+        if (percent >= 100) {
+            etaText = 'Complete';
+        } else if (currentSpeedBytesPerSec > 0) {
+            const etaSec = Math.ceil(remainingBytes / currentSpeedBytesPerSec);
+            etaText = this.formatSeconds(etaSec);
+        }
+
+        // Update graph history
+        this.speedHistory.push(currentMBs);
+        if (this.speedHistory.length > 30) this.speedHistory.shift();
+
+        this.renderUI(percent, currentMBs, currentMbps, avgMBs, etaText);
+        this.drawSpeedGraph();
+    },
+
+    formatSeconds(totalSec) {
+        const m = Math.floor(totalSec / 60);
+        const s = totalSec % 60;
+        return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')} remaining`;
+    },
+
+    renderInitialUI() {
+        if (progressContainer) progressContainer.classList.remove('hidden');
+
+        const dirIcon = document.getElementById('perf-dir-icon');
+        const dirText = document.getElementById('perf-dir-text');
+        const fileNameEl = document.getElementById('perf-file-name');
+        const fileSubEl = document.getElementById('perf-file-sub');
+
+        if (dirIcon) dirIcon.innerText = this.direction === 'sending' ? '↑' : '↓';
+        if (dirText) dirText.innerText = this.direction === 'sending' ? 'Sending' : 'Receiving';
+        if (fileNameEl) {
+            fileNameEl.innerText = this.fileName;
+            fileNameEl.title = this.fileName;
+        }
+        if (fileSubEl) {
+            fileSubEl.innerText = `${formatBytes(this.fileSize)} • ${this.fileType || 'binary'}`;
+        }
+
+        this.updateConnPill();
+    },
+
+    renderUI(percent, currentMBs, currentMbps, avgMBs, etaText) {
+        if (progressBar) progressBar.style.width = `${percent.toFixed(1)}%`;
+        if (progressPercentage) progressPercentage.innerText = `${percent.toFixed(1)}%`;
+
+        const sizeVal = document.getElementById('perf-size');
+        const speedPrimary = document.getElementById('perf-speed-primary');
+        const speedSecondary = document.getElementById('perf-speed-secondary');
+        const avgSpeed = document.getElementById('perf-avg-speed');
+        const etaVal = document.getElementById('perf-eta');
+
+        if (sizeVal) sizeVal.innerText = `${formatBytes(this.bytesTransferred)} / ${formatBytes(this.fileSize)}`;
+        if (speedPrimary) speedPrimary.innerText = `${currentMBs.toFixed(2)} MB/s`;
+        if (speedSecondary) speedSecondary.innerText = `${currentMbps.toFixed(2)} Mbps`;
+        if (avgSpeed) avgSpeed.innerText = `${avgMBs.toFixed(2)} MB/s`;
+        if (etaVal) etaVal.innerText = etaText;
+    },
+
+    drawSpeedGraph() {
+        const canvas = document.getElementById('speed-graph-canvas');
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+
+        ctx.clearRect(0, 0, width, height);
+
+        const maxSpeed = Math.max(1, ...this.speedHistory);
+        const padding = 4;
+        const graphHeight = height - padding * 2;
+        const stepX = width / (this.speedHistory.length - 1);
+
+        // Background grid line
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, height / 2);
+        ctx.lineTo(width, height / 2);
+        ctx.stroke();
+
+        // Area fill
+        const gradient = ctx.createLinearGradient(0, 0, 0, height);
+        gradient.addColorStop(0, 'rgba(0, 198, 255, 0.3)');
+        gradient.addColorStop(1, 'rgba(0, 198, 255, 0.0)');
+
+        ctx.beginPath();
+        ctx.moveTo(0, height);
+        for (let i = 0; i < this.speedHistory.length; i++) {
+            const x = i * stepX;
+            const y = height - padding - (this.speedHistory[i] / maxSpeed) * graphHeight;
+            ctx.lineTo(x, y);
+        }
+        ctx.lineTo(width, height);
+        ctx.closePath();
+        ctx.fillStyle = gradient;
+        ctx.fill();
+
+        // Glowing speed line
+        ctx.beginPath();
+        for (let i = 0; i < this.speedHistory.length; i++) {
+            const x = i * stepX;
+            const y = height - padding - (this.speedHistory[i] / maxSpeed) * graphHeight;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = '#00c6ff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    },
+
+    finish(success = true) {
+        if (!this.active) return;
+        this.active = false;
+
+        if (this.timerId) clearInterval(this.timerId);
+        if (this.perfLogTimerId) clearInterval(this.perfLogTimerId);
+
+        const durationSec = ((performance.now() - this.startTime) / 1000).toFixed(2);
+        const avgMBs = durationSec > 0 ? ((this.fileSize / (1024 * 1024)) / durationSec).toFixed(2) : '0.00';
+
+        if (success) {
+            if (progressBar) progressBar.style.width = '100%';
+            if (progressPercentage) progressPercentage.innerText = '100.0%';
+
+            const etaVal = document.getElementById('perf-eta');
+            if (etaVal) etaVal.innerText = '✓ Complete';
+
+            const sizeVal = document.getElementById('perf-size');
+            if (sizeVal) sizeVal.innerText = `${formatBytes(this.fileSize)} / ${formatBytes(this.fileSize)}`;
+
+            const avgSpeed = document.getElementById('perf-avg-speed');
+            if (avgSpeed) avgSpeed.innerText = `${avgMBs} MB/s (${durationSec}s)`;
+
+            console.log(`[PERF COMPLETE] Transferred ${formatBytes(this.fileSize)} in ${durationSec}s at avg ${avgMBs} MB/s`);
+        }
+    },
+
+    cancel() {
+        this.isCancelled = true;
+        this.active = false;
+
+        if (this.timerId) clearInterval(this.timerId);
+        if (this.perfLogTimerId) clearInterval(this.perfLogTimerId);
+
+        const etaVal = document.getElementById('perf-eta');
+        if (etaVal) etaVal.innerText = 'Cancelled';
+
+        const sizeVal = document.getElementById('perf-size');
+        if (sizeVal) sizeVal.innerText = 'Transfer Cancelled';
+
+        if (dataConnection && dataConnection.open) {
+            try {
+                dataConnection.send(JSON.stringify({ type: 'transfer-cancelled' }));
+            } catch (e) {}
+        }
+    },
+
+    reset() {
+        this.active = false;
+        this.isCancelled = false;
+        if (this.timerId) clearInterval(this.timerId);
+        if (this.perfLogTimerId) clearInterval(this.perfLogTimerId);
+        if (progressContainer) progressContainer.classList.add('hidden');
+    },
+
+    logPerf() {
+        if (!this.active) return;
+        const elapsedSec = (performance.now() - this.startTime) / 1000;
+        const avgMBs = elapsedSec > 0 ? (this.bytesTransferred / (1024 * 1024 * elapsedSec)).toFixed(2) : '0.00';
+        const percent = this.fileSize > 0 ? ((this.bytesTransferred / this.fileSize) * 100).toFixed(2) : '0';
+        const currentMBs = (this.speedHistory[this.speedHistory.length - 1] || 0).toFixed(2);
+        console.log(`[PERF] Transferred: ${formatBytes(this.bytesTransferred)} / ${formatBytes(this.fileSize)} | Progress: ${percent}% | Current: ${currentMBs} MB/s | Average: ${avgMBs} MB/s | Connection: ${this.connectionType}`);
+    }
+};
+
 function setupConnection(conn) {
     dataConnection = conn;
     
@@ -379,21 +674,31 @@ function setupConnection(conn) {
                     expectedChunks = meta.totalChunks || 0;
                     console.log(`[RECEIVER] file-start: name=${meta.name}, size=${meta.size}, fileIndex=${meta.fileIndex + 1}/${meta.totalFiles}`);
                     
-                    progressContainer.classList.remove('hidden');
-                    progressText.innerText = `Receiving (${(meta.fileIndex || 0) + 1}/${meta.totalFiles || 1}): ${meta.name}`;
-                    updateProgress(0);
+                    transferEngine.start('receiving', meta.name, meta.size, meta.fileType);
                 });
             } else if (meta.type === 'file-end') {
                 decryptionQueue.then(async () => {
                     await handshakePromise;
-                    console.log(`[RECEIVER] file-end received for ${incomingFileInfo.name}.`);
-                    saveReceivedFile();
+                    console.log(`[RECEIVER] file-end received for ${incomingFileInfo.name}. Verified bytes: ${receivedSize}/${incomingFileInfo.size}`);
+                    
+                    if (receivedSize === incomingFileInfo.size) {
+                        transferEngine.finish(true);
+                        saveReceivedFile();
+                    } else {
+                        console.error(`[RECEIVER] Mismatch! Expected ${incomingFileInfo.size} bytes, got ${receivedSize} bytes.`);
+                        transferEngine.finish(false);
+                    }
                 });
+            } else if (meta.type === 'transfer-cancelled') {
+                console.log('[RECEIVER] Sender cancelled the transfer');
+                transferEngine.cancel();
+                incomingFileData = [];
             }
         } else {
             // Binary data (Encrypted ArrayBuffer)
             decryptionQueue = decryptionQueue.then(async () => {
                 await handshakePromise;
+                if (transferEngine.isCancelled) return;
                 try {
                     let payload;
                     if (data instanceof Blob) {
@@ -416,8 +721,8 @@ function setupConnection(conn) {
                     receivedChunks++;
                     receivedSize += decryptedChunk.byteLength;
                     
-                    const percentage = Math.round((receivedSize / incomingFileInfo.size) * 100);
-                    updateProgress(percentage);
+                    // Decoupled throttled engine update (no heavy DOM updates per chunk!)
+                    transferEngine.updateBytes(receivedSize);
                 } catch (err) {
                     console.error(`[RECEIVER] Decryption FAILED for chunk #${receivedChunks}:`, err);
                 }
@@ -532,13 +837,19 @@ sendBtn.addEventListener('click', () => {
     }
 });
 
+const cancelTransferBtn = document.getElementById('cancel-transfer-btn');
+if (cancelTransferBtn) {
+    cancelTransferBtn.addEventListener('click', () => {
+        transferEngine.cancel();
+    });
+}
+
 function sendSingleFile(file, fileIndex, totalFiles) {
     return new Promise((resolve, reject) => {
         const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
         console.log(`[SENDER] Starting transfer [${fileIndex + 1}/${totalFiles}]: name=${file.name}, size=${file.size}, totalChunks=${totalChunks}`);
         
-        progressText.innerText = `Sending (${fileIndex + 1}/${totalFiles}): ${file.name}`;
-        updateProgress(0);
+        transferEngine.start('sending', file.name, file.size, file.type);
 
         dataConnection.send(JSON.stringify({
             type: 'file-start',
@@ -554,11 +865,16 @@ function sendSingleFile(file, fileIndex, totalFiles) {
         let offset = 0;
 
         function readNextChunk() {
+            if (transferEngine.isCancelled) {
+                console.log('[SENDER] Transfer cancelled by user.');
+                resolve();
+                return;
+            }
+
             if (offset >= file.size) {
                 console.log(`[SENDER] All chunks queued for ${file.name}. Sending file-end.`);
                 dataConnection.send(JSON.stringify({ type: 'file-end' }));
-                progressText.innerText = `Sent (${fileIndex + 1}/${totalFiles}): ${file.name}`;
-                updateProgress(100);
+                transferEngine.finish(true);
                 resolve();
                 return;
             }
@@ -567,6 +883,11 @@ function sendSingleFile(file, fileIndex, totalFiles) {
             const reader = new FileReader();
 
             reader.onload = async (e) => {
+                if (transferEngine.isCancelled) {
+                    resolve();
+                    return;
+                }
+
                 const rawBytes = new Uint8Array(e.target.result);
                 
                 const iv = window.crypto.getRandomValues(new Uint8Array(12));
@@ -584,8 +905,8 @@ function sendSingleFile(file, fileIndex, totalFiles) {
                 chunkIndex++;
                 offset += slice.size;
 
-                const percent = Math.floor((offset / file.size) * 100);
-                updateProgress(percent);
+                // Throttled performance byte update
+                transferEngine.updateBytes(offset);
 
                 if (dataConnection.bufferedAmount > 64 * 1024) {
                     setTimeout(readNextChunk, 10);
@@ -596,6 +917,7 @@ function sendSingleFile(file, fileIndex, totalFiles) {
 
             reader.onerror = (err) => {
                 console.error("[SENDER] FileReader error:", err);
+                transferEngine.finish(false);
                 reject(err);
             };
 
@@ -686,10 +1008,9 @@ function resetTransferState() {
     joinBtn.disabled = false;
     createBtn.disabled = false;
     resetFileSelection();
-    progressContainer.classList.add('hidden');
+    transferEngine.reset();
     downloadContainer.classList.add('hidden');
     if (downloadList) downloadList.innerHTML = '';
-    updateProgress(0);
     localE2EEReady = false;
     remoteE2EEReady = false;
     sharedCryptoKey = null;

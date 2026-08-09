@@ -1076,3 +1076,217 @@ input[type="text"]:focus {
     color: var(--text-muted);
     text-align: center;
 }
+
+/* =========================================================================
+   REAL-TIME PERFORMANCE CARD STYLES
+   ========================================================================= */
+
+.progress-panel {
+    background: rgba(14, 18, 28, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-lg);
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4);
+}
+
+.perf-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.file-direction-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    background: rgba(0, 198, 255, 0.1);
+    border: 1px solid rgba(0, 198, 255, 0.25);
+    border-radius: 100px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--accent-cyan);
+    letter-spacing: 0.5px;
+}
+
+.direction-icon {
+    font-size: 0.9rem;
+    line-height: 1;
+    animation: bounceDir 1.5s infinite ease-in-out;
+}
+
+@keyframes bounceDir {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-2px); }
+}
+
+.perf-conn-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 100px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.perf-conn-pill.direct {
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: var(--accent-emerald);
+}
+
+.perf-conn-pill.relay {
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: #f59e0b;
+}
+
+.conn-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 6px currentColor;
+}
+
+.perf-file-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.perf-file-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent-cyan);
+    flex-shrink: 0;
+}
+
+.perf-file-meta {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
+
+.perf-file-name {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.perf-file-sub {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.cancel-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    background: rgba(255, 51, 102, 0.1);
+    border: 1px solid rgba(255, 51, 102, 0.3);
+    border-radius: 8px;
+    color: #ff3366;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.cancel-btn:hover {
+    background: rgba(255, 51, 102, 0.2);
+    box-shadow: 0 0 12px rgba(255, 51, 102, 0.3);
+}
+
+.perf-bar-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.perf-large-percent {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: var(--accent-cyan);
+    min-width: 60px;
+    text-align: right;
+}
+
+.perf-metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    background: rgba(8, 10, 15, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: var(--radius-md);
+    padding: 12px;
+}
+
+.metric-box {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.metric-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.metric-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.metric-val.highlight {
+    color: var(--accent-cyan);
+}
+
+.metric-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.perf-graph-container {
+    width: 100%;
+    height: 50px;
+    background: rgba(6, 8, 12, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.perf-graph-container canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+@media (max-width: 600px) {
+    .perf-metrics-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+    }
+}
