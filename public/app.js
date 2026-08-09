@@ -37,6 +37,8 @@ let incomingFileInfo = null;
 let incomingFileData = [];
 let receivedSize = 0;
 let decryptionQueue = Promise.resolve();
+let expectedChunks = 0;  // DEBUG: total chunks sender will send
+let receivedChunks = 0; // DEBUG: how many chunks receiver has decrypted
 
 const APP_PREFIX = 'airdrop-web-p2p-';
 
@@ -175,20 +177,28 @@ function setupConnection(conn) {
                 incomingFileInfo = meta;
                 incomingFileData = [];
                 receivedSize = 0;
+                receivedChunks = 0;
+                expectedChunks = meta.totalChunks || 0;
                 decryptionQueue = Promise.resolve();
+                console.log(`[RECEIVER] file-start: name=${meta.name}, size=${meta.size}, expectedChunks=${meta.totalChunks}`);
                 
                 progressContainer.classList.remove('hidden');
                 downloadContainer.classList.add('hidden');
                 progressText.innerText = 'Receiving...';
                 updateProgress(0);
             } else if (meta.type === 'file-end') {
+                console.log(`[RECEIVER] file-end received. Waiting for decryptionQueue to flush...`);
                 decryptionQueue.then(() => {
+                    console.log(`[RECEIVER] Queue flushed. Chunks stored: ${incomingFileData.length}, totalBytes: ${receivedSize}`);
                     saveReceivedFile();
                 });
             }
         } else {
             // Binary data (Encrypted ArrayBuffer)
-            if (!sharedCryptoKey) return;
+            if (!sharedCryptoKey) {
+                console.error('[RECEIVER] Binary chunk arrived but sharedCryptoKey is NULL — E2EE handshake not complete yet!');
+                return;
+            }
             
             decryptionQueue = decryptionQueue.then(async () => {
                 try {
@@ -200,7 +210,12 @@ function setupConnection(conn) {
                         payload = new Uint8Array(data);
                     }
 
-                    if (payload.length <= 12) return;
+                    console.log(`[RECEIVER] Binary chunk #${receivedChunks}: dataType=${data.constructor.name}, payloadBytes=${payload.length}`);
+
+                    if (payload.length <= 12) {
+                        console.error(`[RECEIVER] Chunk #${receivedChunks} too small to decrypt (${payload.length} bytes), skipping.`);
+                        return;
+                    }
                     
                     const iv = payload.slice(0, 12);
                     const encryptedChunk = payload.slice(12);
@@ -211,12 +226,14 @@ function setupConnection(conn) {
                         encryptedChunk
                     );
                     incomingFileData.push(decryptedChunk);
+                    receivedChunks++;
                     receivedSize += decryptedChunk.byteLength;
+                    console.log(`[RECEIVER] Chunk #${receivedChunks} decrypted: ${decryptedChunk.byteLength} bytes, totalReceived=${receivedSize}`);
                     
                     const percentage = Math.round((receivedSize / incomingFileInfo.size) * 100);
                     updateProgress(percentage);
                 } catch (err) {
-                    console.error("Decryption failed for a chunk", err);
+                    console.error(`[RECEIVER] Decryption FAILED for chunk #${receivedChunks}:`, err);
                 }
             });
         }
@@ -305,15 +322,19 @@ function sendFile(file) {
     progressContainer.classList.remove('hidden');
     progressText.innerText = 'Sending...';
     
-    // Send meta (we send meta unencrypted for simplicity, but it could also be encrypted)
+    // Send meta with totalChunks so receiver can verify
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+    console.log(`[SENDER] Starting transfer: name=${file.name}, size=${file.size}, totalChunks=${totalChunks}`);
     dataConnection.send(JSON.stringify({
         type: 'file-start',
         name: file.name,
         size: file.size,
-        fileType: file.type
+        fileType: file.type,
+        totalChunks: totalChunks
     }));
 
     let offset = 0;
+    let chunkIndex = 0;
     const reader = new FileReader();
     
     reader.onerror = error => console.error('Error reading file:', error);
@@ -335,9 +356,11 @@ function sendFile(file) {
             const payload = new Uint8Array(iv.length + encryptedChunk.byteLength);
             payload.set(iv, 0);
             payload.set(new Uint8Array(encryptedChunk), iv.length);
-            
+
+            console.log(`[SENDER] Sending chunk #${chunkIndex}: rawBytes=${rawChunk.byteLength}, payloadBytes=${payload.buffer.byteLength}`);
             // Send the ArrayBuffer directly for maximum PeerJS compatibility
             dataConnection.send(payload.buffer);
+            chunkIndex++;
             
             offset += rawChunk.byteLength;
             const percentage = Math.round((offset / file.size) * 100);
@@ -347,6 +370,7 @@ function sendFile(file) {
                 // Throttle slightly to prevent memory overwhelming on fast local networks with large files + encryption overhead
                 setTimeout(() => readSlice(offset), 0);
             } else {
+                console.log(`[SENDER] All ${chunkIndex} chunks sent. Sending file-end.`);
                 dataConnection.send(JSON.stringify({ type: 'file-end' }));
                 progressText.innerText = 'Sent successfully!';
                 sendBtn.disabled = false;
