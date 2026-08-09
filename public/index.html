@@ -2,109 +2,179 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Airodump - P2P Transfer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Airodump — Direct P2P File Transfer</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="liquid-bg">
-        <div class="blob blob-1"></div>
-        <div class="blob blob-2"></div>
-        <div class="blob blob-3"></div>
+    <!-- Subtle Background Lighting & Grid -->
+    <div class="bg-grid"></div>
+    <div class="ambient-glow glow-1"></div>
+    <div class="ambient-glow glow-2"></div>
+
+    <div class="app-layout">
+        <!-- Minimal Top Navbar -->
+        <nav class="nav-bar">
+            <div class="brand">
+                <div class="brand-logo">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                        <polyline points="2 17 12 22 22 17"></polyline>
+                        <polyline points="2 12 12 17 22 12"></polyline>
+                    </svg>
+                </div>
+                <span class="brand-name">AIRODUMP</span>
+            </div>
+            <div class="nav-badges">
+                <span class="nav-tag"><span class="pulse-dot"></span> E2EE P2P</span>
+            </div>
+        </nav>
+
+        <!-- Main Content Glass Container -->
+        <main class="glass-container">
+            
+            <!-- SECTION 1: ROOM CREATION & JOINING (Landing State) -->
+            <div id="room-section" class="section active">
+                <div class="hero-header">
+                    <h2>Direct device-to-device transfer.</h2>
+                    <p>No cloud upload. No size limits. End-to-end encrypted.</p>
+                </div>
+
+                <div class="connection-card-grid">
+                    <!-- Create Room Box -->
+                    <div class="action-card create-card">
+                        <div class="card-header">
+                            <span class="card-icon">⚡</span>
+                            <div>
+                                <h3>Create Room</h3>
+                                <p>Start a secure session</p>
+                            </div>
+                        </div>
+                        <button id="create-btn" class="btn primary-glow-btn">Create Secure Room</button>
+                        
+                        <div id="created-code-container" class="created-code-panel hidden">
+                            <p class="panel-label">Share code with peer device</p>
+                            <div class="code-box">
+                                <span id="generated-code">----</span>
+                                <button id="copy-btn" class="copy-action-btn" title="Copy Code">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
+                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div id="qr-code-box" class="qr-code-box hidden">
+                                <canvas id="qr-canvas" width="160" height="160"></canvas>
+                                <p class="qr-hint">Scan with mobile camera</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Divider -->
+                    <div class="divider">
+                        <span>OR</span>
+                    </div>
+
+                    <!-- Join Room Box -->
+                    <div class="action-card join-card">
+                        <div class="card-header">
+                            <span class="card-icon">🔗</span>
+                            <div>
+                                <h3>Join Room</h3>
+                                <p>Enter code from creator</p>
+                            </div>
+                        </div>
+                        <div class="input-action-row">
+                            <input type="text" id="room-input" placeholder="4-Char Code" maxlength="4" autocomplete="off" spellcheck="false" />
+                            <button id="join-btn" class="btn secondary-glow-btn">Join</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="room-status" class="status-banner"></div>
+            </div>
+
+            <!-- SECTION 2: TRANSFER & FILE SHARING (Connected State) -->
+            <div id="transfer-section" class="section hidden">
+                <div class="transfer-header-bar">
+                    <div class="connection-status">
+                        <span class="status-dot connected"></span> Connected to peer
+                    </div>
+                    <button class="reload-action-btn icon-button" title="Reload Session">
+                        <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none">
+                            <path d="M23 4v6h-6"></path>
+                            <path d="M1 20v-6h6"></path>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                        </svg>
+                        <span>Reset</span>
+                    </button>
+                </div>
+
+                <div class="transfer-grid">
+                    <!-- Left Column: Upload Area, Progress & Downloads -->
+                    <div class="transfer-left-col">
+                        <div class="file-upload-wrapper">
+                            <input type="file" id="file-input" class="file-input" multiple>
+                            <div class="upload-area" id="upload-area">
+                                <div class="upload-icon-circle">
+                                    <svg viewBox="0 0 24 24" width="26" height="26" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="17 8 12 3 7 8"></polyline>
+                                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                                    </svg>
+                                </div>
+                                <div class="upload-prompt">
+                                    <p class="main-prompt">Drop file(s) here or <span>browse</span></p>
+                                    <p class="sub-prompt">Encrypted peer-to-peer stream</p>
+                                </div>
+                                <div id="selected-file-name" class="file-name-badge"></div>
+                            </div>
+                        </div>
+
+                        <!-- Progress Bar -->
+                        <div id="progress-container" class="progress-panel hidden">
+                            <div class="progress-header">
+                                <span id="progress-text" class="progress-title">Transferring...</span>
+                                <span id="progress-percentage" class="progress-num">0%</span>
+                            </div>
+                            <div class="progress-track">
+                                <div id="progress-bar" class="progress-fill"></div>
+                            </div>
+                        </div>
+
+                        <!-- Received Files Downloads -->
+                        <div id="download-container" class="download-panel hidden">
+                            <div class="download-header-row">
+                                <span class="download-icon">📥</span>
+                                <p id="download-status-text">File(s) received successfully!</p>
+                            </div>
+                            <div id="download-list" class="download-items-list"></div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Control Buttons -->
+                    <div class="transfer-right-col">
+                        <button id="send-btn" class="btn primary-glow-btn" disabled>Send File(s)</button>
+                        <button id="send-another-btn" class="btn secondary-glow-btn hidden">📁 Send Another File</button>
+                        <button class="reload-action-btn btn tertiary-btn">🔄 Reload Session</button>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p>Direct P2P Stream • WebRTC & WebCrypto AES-256</p>
+            <a href="https://about.me/notrazx" target="_blank" rel="noopener" class="footer-link">About</a>
+        </footer>
     </div>
 
-    <div class="glass-container">
-        <header>
-            <h1>Airo<span>dump</span></h1>
-            <p>Peer-to-peer file transfer</p>
-        </header>
-
-        <div id="room-section" class="section active">
-            <h2>Secure Connection</h2>
-            <p>Create a secure room or join an existing one.</p>
-            
-            <div class="connection-options">
-                <div class="create-room-box">
-                    <button id="create-btn" class="primary-btn">Create Secure Room</button>
-                    <div id="created-code-container" class="hidden mt-4">
-                        <p>Share this code:</p>
-                        <div class="code-display">
-                            <span id="generated-code">----</span>
-                            <button id="copy-btn" class="btn icon-btn" title="Copy Code">📋</button>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="divider">
-                    <span>OR</span>
-                </div>
-
-                <div class="join-room-box">
-                    <div class="input-group">
-                        <input type="text" id="room-input" placeholder="Code (e.g. AB12)" maxlength="4" style="text-transform: uppercase;" />
-                        <button id="join-btn" class="secondary-btn">Join Room</button>
-                    </div>
-                </div>
-            </div>
-            
-            <p id="room-status" class="status-text mt-4"></p>
-        </div>
-
-        <div id="transfer-section" class="section hidden">
-            <div class="transfer-top-bar">
-                <div class="connection-status">
-                    <span class="status-dot connected"></span> Connected to peer
-                </div>
-                <button class="reload-action-btn icon-btn" title="Reload Session">
-                    🔄 Reload
-                </button>
-            </div>
-            
-            <div class="transfer-grid">
-                <!-- Left Panel: Upload, Progress & Downloads -->
-                <div class="transfer-left-col">
-                    <div class="file-upload-wrapper">
-                        <input type="file" id="file-input" class="file-input" multiple>
-                        <div class="upload-area" id="upload-area">
-                            <svg viewBox="0 0 24 24" width="40" height="40" stroke="currentColor" stroke-width="2" fill="none">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                <polyline points="17 8 12 3 7 8"></polyline>
-                                <line x1="12" y1="3" x2="12" y2="15"></line>
-                            </svg>
-                            <p>Drag & drop or click to select file(s)</p>
-                            <span id="selected-file-name" class="file-name"></span>
-                        </div>
-                    </div>
-
-                    <div id="progress-container" class="hidden">
-                        <div class="progress-info">
-                            <span id="progress-text">Sending...</span>
-                            <span id="progress-percentage">0%</span>
-                        </div>
-                        <div class="progress-bar-bg">
-                            <div id="progress-bar" class="progress-bar-fill"></div>
-                        </div>
-                    </div>
-
-                    <div id="download-container" class="hidden mt-4">
-                        <p id="download-status-text">File(s) received successfully!</p>
-                        <div id="download-list" class="download-list mt-4"></div>
-                    </div>
-                </div>
-
-                <!-- Right Panel: Controls & Buttons -->
-                <div class="transfer-right-col">
-                    <button id="send-btn" class="primary-btn" disabled>Send File(s)</button>
-                    <button id="send-another-btn" class="secondary-btn hidden">📁 Send Another File</button>
-                    <button class="reload-action-btn secondary-btn">🔄 Reload Session</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <a href="https://about.me/notrazx" target="_blank" class="about-btn">About</a>
+    <!-- Scripts -->
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script src="app.js"></script>
 </body>

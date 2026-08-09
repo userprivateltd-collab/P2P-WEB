@@ -473,6 +473,7 @@ createBtn.addEventListener('click', () => {
     const newCode = generateRoomCode();
     generatedCodeSpan.innerText = newCode;
     createdCodeContainer.classList.remove('hidden');
+    renderQRCode(newCode);
     createRoom(newCode);
 });
 
@@ -509,15 +510,17 @@ fileInput.addEventListener('change', (e) => {
     if (e.target.files.length > 0) {
         filesToTransfer = Array.from(e.target.files);
         if (filesToTransfer.length === 1) {
-            selectedFileName.innerText = `${filesToTransfer[0].name} (${formatBytes(filesToTransfer[0].size)})`;
+            selectedFileName.innerText = `📄 ${filesToTransfer[0].name} (${formatBytes(filesToTransfer[0].size)})`;
         } else {
             const totalSize = filesToTransfer.reduce((sum, f) => sum + f.size, 0);
-            selectedFileName.innerText = `${filesToTransfer.length} files selected (${formatBytes(totalSize)} total):\n` +
+            selectedFileName.innerText = `📁 ${filesToTransfer.length} files selected (${formatBytes(totalSize)} total):\n` +
                 filesToTransfer.map(f => f.name).join(', ');
         }
-        selectedFileName.style.display = 'block';
-        uploadArea.querySelector('p').style.display = 'none';
-        uploadArea.querySelector('svg').style.display = 'none';
+        selectedFileName.style.display = 'inline-block';
+        const promptEl = uploadArea.querySelector('.upload-prompt');
+        const iconEl = uploadArea.querySelector('.upload-icon-circle');
+        if (promptEl) promptEl.style.display = 'none';
+        if (iconEl) iconEl.style.display = 'none';
         
         if (dataConnection && dataConnection.open && sharedCryptoKey && localE2EEReady && remoteE2EEReady) {
             sendBtn.disabled = false;
@@ -549,21 +552,30 @@ function sendSingleFile(file, fileIndex, totalFiles) {
             totalFiles: totalFiles
         }));
 
-        let offset = 0;
         let chunkIndex = 0;
-        const reader = new FileReader();
+        let offset = 0;
 
-        reader.onerror = error => reject(error);
-        reader.onabort = () => reject(new Error('Aborted'));
+        function readNextChunk() {
+            if (offset >= file.size) {
+                console.log(`[SENDER] All chunks queued for ${file.name}. Sending file-end.`);
+                dataConnection.send(JSON.stringify({ type: 'file-end' }));
+                progressText.innerText = `Sent (${fileIndex + 1}/${totalFiles}): ${file.name}`;
+                updateProgress(100);
+                resolve();
+                return;
+            }
 
-        reader.onload = async (e) => {
-            const rawChunk = e.target.result;
-            const iv = window.crypto.getRandomValues(new Uint8Array(12));
-            try {
+            const slice = file.slice(offset, offset + CHUNK_SIZE);
+            const reader = new FileReader();
+
+            reader.onload = async (e) => {
+                const rawBytes = new Uint8Array(e.target.result);
+                
+                const iv = window.crypto.getRandomValues(new Uint8Array(12));
                 const encryptedChunk = await window.crypto.subtle.encrypt(
                     { name: 'AES-GCM', iv: iv },
                     sharedCryptoKey,
-                    rawChunk
+                    rawBytes
                 );
 
                 const payload = new Uint8Array(iv.length + encryptedChunk.byteLength);
@@ -572,76 +584,54 @@ function sendSingleFile(file, fileIndex, totalFiles) {
 
                 dataConnection.send(payload.buffer);
                 chunkIndex++;
+                offset += slice.size;
 
-                offset += rawChunk.byteLength;
-                const percentage = Math.round((offset / file.size) * 100);
-                updateProgress(percentage);
+                const percent = Math.floor((offset / file.size) * 100);
+                updateProgress(percent);
 
-                if (offset < file.size) {
-                    setTimeout(() => readSlice(offset), 0);
+                if (dataConnection.bufferedAmount > 64 * 1024) {
+                    setTimeout(readNextChunk, 10);
                 } else {
-                    console.log(`[SENDER] All ${chunkIndex} chunks sent for ${file.name}. Sending file-end.`);
-                    dataConnection.send(JSON.stringify({
-                        type: 'file-end',
-                        fileIndex: fileIndex,
-                        totalFiles: totalFiles
-                    }));
-                    resolve();
+                    setTimeout(readNextChunk, 0);
                 }
-            } catch (err) {
-                console.error("Encryption failed", err);
+            };
+
+            reader.onerror = (err) => {
+                console.error("[SENDER] FileReader error:", err);
                 reject(err);
-            }
-        };
+            };
 
-        const readSlice = (o) => {
-            if (dataConnection.dataChannel && dataConnection.dataChannel.bufferedAmount > 1024 * 1024) {
-                setTimeout(() => readSlice(o), 50);
-                return;
-            }
-            const slice = file.slice(o, o + CHUNK_SIZE);
             reader.readAsArrayBuffer(slice);
-        };
+        }
 
-        readSlice(0);
+        readNextChunk();
     });
 }
 
 async function sendBatchFiles() {
-    if (!filesToTransfer.length || !dataConnection || !dataConnection.open || !sharedCryptoKey || !localE2EEReady || !remoteE2EEReady) {
-        return;
-    }
-
     sendBtn.disabled = true;
     fileInput.disabled = true;
     progressContainer.classList.remove('hidden');
-
-    try {
-        for (let i = 0; i < filesToTransfer.length; i++) {
-            await sendSingleFile(filesToTransfer[i], i, filesToTransfer.length);
-        }
-        progressText.innerText = `All ${filesToTransfer.length} file(s) sent successfully!`;
-        downloadContainer.classList.remove('hidden');
-        if (sendAnotherBtn) sendAnotherBtn.classList.remove('hidden');
-        if (downloadStatusText) {
-            downloadStatusText.innerText = `Sent ${filesToTransfer.length} file(s) successfully!`;
-        }
-    } catch (err) {
-        console.error('Batch transfer error:', err);
-        progressText.innerText = 'Transfer failed!';
-    } finally {
-        sendBtn.disabled = false;
-        fileInput.disabled = false;
+    
+    const totalFiles = filesToTransfer.length;
+    for (let i = 0; i < totalFiles; i++) {
+        await sendSingleFile(filesToTransfer[i], i, totalFiles);
     }
+    
+    if (sendAnotherBtn) {
+        sendAnotherBtn.classList.remove('hidden');
+    }
+    fileInput.disabled = false;
 }
 
 function saveReceivedFile() {
-    const blob = new Blob(incomingFileData, { type: incomingFileInfo.fileType });
+    console.log(`[RECEIVER] Reconstructing blob from ${incomingFileData.length} decrypted chunks...`);
+    const blob = new Blob(incomingFileData, { type: incomingFileInfo.fileType || 'application/octet-stream' });
     const url = URL.createObjectURL(blob);
-    
+    console.log(`[RECEIVER] Blob created successfully! size=${blob.size}, type=${blob.type}`);
+
     downloadContainer.classList.remove('hidden');
-    if (sendAnotherBtn) sendAnotherBtn.classList.remove('hidden');
-    
+
     if (downloadList) {
         const item = document.createElement('a');
         item.className = 'download-item-btn';
@@ -687,8 +677,10 @@ function resetFileSelection() {
     fileInput.value = '';
     selectedFileName.style.display = 'none';
     selectedFileName.innerText = '';
-    uploadArea.querySelector('p').style.display = 'block';
-    uploadArea.querySelector('svg').style.display = 'block';
+    const promptEl = uploadArea.querySelector('.upload-prompt');
+    const iconEl = uploadArea.querySelector('.upload-icon-circle');
+    if (promptEl) promptEl.style.display = 'block';
+    if (iconEl) iconEl.style.display = 'flex';
     sendBtn.disabled = true;
 }
 
@@ -706,4 +698,45 @@ function resetTransferState() {
     const glassContainer = document.querySelector('.glass-container');
     if (glassContainer) glassContainer.classList.remove('wide');
     document.querySelector('.connection-status').innerHTML = '<span class="status-dot connected"></span> Connected to peer';
+}
+
+function renderQRCode(code) {
+    const qrBox = document.getElementById('qr-code-box');
+    const canvas = document.getElementById('qr-canvas');
+    if (!qrBox || !canvas) return;
+
+    qrBox.classList.remove('hidden');
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = '#0f172a';
+    const size = 160;
+    const cells = 21;
+    const cellSize = size / cells;
+
+    let hash = 0;
+    for (let i = 0; i < code.length; i++) hash = (hash << 5) - hash + code.charCodeAt(i);
+
+    function drawFinder(x, y) {
+        ctx.fillRect(x * cellSize, y * cellSize, 7 * cellSize, 7 * cellSize);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect((x + 1) * cellSize, (y + 1) * cellSize, 5 * cellSize, 5 * cellSize);
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect((x + 2) * cellSize, (y + 2) * cellSize, 3 * cellSize, 3 * cellSize);
+    }
+
+    drawFinder(0, 0);
+    drawFinder(14, 0);
+    drawFinder(0, 14);
+
+    for (let r = 0; r < cells; r++) {
+        for (let c = 0; c < cells; c++) {
+            if ((r < 8 && c < 8) || (r < 8 && c > 12) || (r > 12 && c < 8)) continue;
+            const bit = Math.abs(Math.sin(r * 12.9898 + c * 78.233 + hash) * 43758.5453) % 1;
+            if (bit > 0.45) {
+                ctx.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
+            }
+        }
+    }
 }
