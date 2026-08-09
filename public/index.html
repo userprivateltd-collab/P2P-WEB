@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P2P Transfer</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="liquid-bg">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
+    <div class="glass-container">
+        <header>
+            <h1>AirDrop <span>Web</span></h1>
+            <p>Peer-to-peer file transfer</p>
+        </header>
+
+        <div id="room-section" class="section active">
+            <div class="input-group">
+                <input type="text" id="room-input" placeholder="Enter Room Code (e.g., 1234)" maxlength="8">
+                <button id="join-btn" class="primary-btn">Join / Create</button>
+            </div>
+            <p id="room-status" class="status-message"></p>
+        </div>
+
+        <div id="transfer-section" class="section hidden">
+            <div class="connection-status">
+                <span class="status-dot connected"></span> Connected to peer
+            </div>
+            
+            <div class="file-upload-wrapper">
+                <input type="file" id="file-input" class="file-input">
+                <div class="upload-area" id="upload-area">
+                    <svg viewBox="0 0 24 24" width="48" height="48" stroke="currentColor" stroke-width="2" fill="none">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    <p>Drag & drop or click to select a file</p>
+                    <span id="selected-file-name" class="file-name"></span>
+                </div>
+            </div>
+
+            <button id="send-btn" class="primary-btn" disabled>Send File</button>
+            
+            <div id="progress-container" class="hidden">
+                <div class="progress-info">
+                    <span id="progress-text">Sending...</span>
+                    <span id="progress-percentage">0%</span>
+                </div>
+                <div class="progress-bar-bg">
+                    <div id="progress-bar" class="progress-bar-fill"></div>
+                </div>
+            </div>
+
+            <div id="download-container" class="hidden mt-4">
+                <p>File received successfully!</p>
+                <a id="download-link" class="secondary-btn" download>Download File</a>
+            </div>
+        </div>
+    </div>
+
+    <a href="https://about.me/notrazx" target="_blank" class="about-btn">About</a>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
