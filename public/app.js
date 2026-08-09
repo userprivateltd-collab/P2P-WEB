@@ -31,10 +31,15 @@ let fileToSend = null;
 // E2EE State
 let myKeyPair = null;
 let sharedCryptoKey = null;
+let localE2EEReady = false;
+let remoteE2EEReady = false;
 let handshakeResolve = null;
 let handshakePromise = null;
 
 function resetHandshakeGate() {
+    localE2EEReady = false;
+    remoteE2EEReady = false;
+    sharedCryptoKey = null;
     handshakePromise = new Promise(resolve => { handshakeResolve = resolve; });
 }
 
@@ -82,13 +87,33 @@ async function deriveAESKey(privateKey, publicKey) {
     );
 }
 
-async function performHandshake() {
-    // myKeyPair is pre-generated before this is called
+async function startE2EEHandshake() {
+    resetHandshakeGate();
+    myKeyPair = await generateECDHKeyPair();
+    console.log('[HANDSHAKE] Local key generated');
     const pubJwk = await exportPublicKey(myKeyPair.publicKey);
     dataConnection.send(JSON.stringify({
         type: 'ecdh-public-key',
         key: pubJwk
     }));
+    console.log('[HANDSHAKE] Public key sent');
+}
+
+function checkE2EEComplete() {
+    if (sharedCryptoKey && localE2EEReady && remoteE2EEReady) {
+        console.log('[HANDSHAKE] E2EE COMPLETE');
+        roomStatus.innerText = 'Connected & E2EE Secured 🔒';
+        const connStatusEl = document.querySelector('.connection-status');
+        if (connStatusEl) {
+            connStatusEl.innerHTML = '<span class="status-dot connected"></span> Connected & E2EE Secured 🔒';
+        }
+        if (handshakeResolve) {
+            handshakeResolve();
+        }
+        if (fileToSend && dataConnection && dataConnection.open) {
+            sendBtn.disabled = false;
+        }
+    }
 }
 
 // --- PeerJS Logic ---
@@ -102,12 +127,10 @@ function initPeer(roomId) {
         
         conn.on('open', async () => {
             roomStatus.innerText = 'Connected to peer! Negotiating E2EE...';
-            resetHandshakeGate();
-            myKeyPair = await generateECDHKeyPair(); // Generate BEFORE registering data handler
             setupConnection(conn);
             peer = tempPeer;
             showTransferSection();
-            performHandshake(); // Send public key
+            await startE2EEHandshake();
             
             peer.on('error', (err) => console.error(err));
         });
@@ -116,6 +139,7 @@ function initPeer(roomId) {
             tempPeer.destroy();
             roomStatus.innerText = 'Failed to connect. Code might be invalid or peer offline.';
             joinBtn.disabled = false;
+            createBtn.disabled = false;
         });
         
         setTimeout(() => {
@@ -124,6 +148,7 @@ function initPeer(roomId) {
                 tempPeer.destroy();
                 roomStatus.innerText = 'Connection timed out. Check the code and try again.';
                 joinBtn.disabled = false;
+                createBtn.disabled = false;
             }
         }, 5000);
     });
@@ -144,20 +169,26 @@ function createRoom(roomId) {
             return;
         }
         roomStatus.innerText = 'Peer joined! Negotiating E2EE...';
-        resetHandshakeGate();
-        myKeyPair = await generateECDHKeyPair(); // Generate BEFORE registering data handler
         setupConnection(conn);
         showTransferSection();
-        performHandshake(); // Send public key
+        if (conn.open) {
+            await startE2EEHandshake();
+        } else {
+            conn.on('open', async () => {
+                await startE2EEHandshake();
+            });
+        }
     });
     
     peer.on('error', (err) => {
         if (err.type === 'unavailable-id') {
             roomStatus.innerText = 'Room already exists and is full or busy.';
             joinBtn.disabled = false;
+            createBtn.disabled = false;
         } else {
             roomStatus.innerText = 'Connection error: ' + err.message;
             joinBtn.disabled = false;
+            createBtn.disabled = false;
         }
     });
 }
@@ -170,37 +201,41 @@ function setupConnection(conn) {
             const meta = JSON.parse(data);
             
             if (meta.type === 'ecdh-public-key') {
+                console.log('[HANDSHAKE] Remote public key received');
                 try {
                     const remotePub = await importPublicKey(meta.key);
                     sharedCryptoKey = await deriveAESKey(myKeyPair.privateKey, remotePub);
-                    handshakeResolve(); // Unblock any waiting binary chunks
-                    console.log('[RECEIVER] E2EE handshake complete. sharedCryptoKey derived.');
-                    roomStatus.innerText = 'Connected & E2EE Secured 🔒';
-                    // Update UI in transfer section too
-                    document.querySelector('.connection-status').innerHTML = '<span class="status-dot connected"></span> Connected & E2EE Secured 🔒';
-                    
-                    if (fileToSend) {
-                        sendBtn.disabled = false;
-                    }
+                    console.log('[HANDSHAKE] Shared AES key derived');
+                    localE2EEReady = true;
+                    dataConnection.send(JSON.stringify({ type: 'e2ee-ready' }));
+                    console.log('[HANDSHAKE] Local E2EE ready sent');
+                    checkE2EEComplete();
                 } catch (e) {
                     console.error("E2EE Handshake failed", e);
                 }
+            } else if (meta.type === 'e2ee-ready') {
+                remoteE2EEReady = true;
+                console.log('[HANDSHAKE] Remote E2EE ready received');
+                checkE2EEComplete();
             } else if (meta.type === 'file-start') {
-                incomingFileInfo = meta;
-                incomingFileData = [];
-                receivedSize = 0;
-                receivedChunks = 0;
-                expectedChunks = meta.totalChunks || 0;
-                decryptionQueue = Promise.resolve();
-                console.log(`[RECEIVER] file-start: name=${meta.name}, size=${meta.size}, expectedChunks=${meta.totalChunks}`);
-                
-                progressContainer.classList.remove('hidden');
-                downloadContainer.classList.add('hidden');
-                progressText.innerText = 'Receiving...';
-                updateProgress(0);
+                decryptionQueue = decryptionQueue.then(async () => {
+                    await handshakePromise;
+                    incomingFileInfo = meta;
+                    incomingFileData = [];
+                    receivedSize = 0;
+                    receivedChunks = 0;
+                    expectedChunks = meta.totalChunks || 0;
+                    console.log(`[RECEIVER] file-start: name=${meta.name}, size=${meta.size}, expectedChunks=${meta.totalChunks}`);
+                    
+                    progressContainer.classList.remove('hidden');
+                    downloadContainer.classList.add('hidden');
+                    progressText.innerText = 'Receiving...';
+                    updateProgress(0);
+                });
             } else if (meta.type === 'file-end') {
-                console.log(`[RECEIVER] file-end received. Waiting for decryptionQueue to flush...`);
-                decryptionQueue.then(() => {
+                decryptionQueue.then(async () => {
+                    await handshakePromise;
+                    console.log(`[RECEIVER] file-end received. Waiting for decryptionQueue to flush...`);
                     console.log(`[RECEIVER] Queue flushed. Chunks stored: ${incomingFileData.length}, totalBytes: ${receivedSize}`);
                     saveReceivedFile();
                 });
@@ -209,7 +244,7 @@ function setupConnection(conn) {
             // Binary data (Encrypted ArrayBuffer)
             // Queue chunk and wait for handshake to complete before decrypting
             decryptionQueue = decryptionQueue.then(async () => {
-                await handshakePromise; // Wait for E2EE key derivation if not done yet
+                await handshakePromise; // Wait for E2EE COMPLETE
                 try {
                     let payload;
                     if (data instanceof Blob) {
@@ -263,6 +298,8 @@ function setupConnection(conn) {
         }
         dataConnection = null;
         sharedCryptoKey = null;
+        localE2EEReady = false;
+        remoteE2EEReady = false;
         document.querySelector('.connection-status').innerHTML = '<span class="status-dot connected"></span> Connected to peer';
     });
 }
@@ -312,20 +349,24 @@ fileInput.addEventListener('change', (e) => {
         uploadArea.querySelector('p').style.display = 'none';
         uploadArea.querySelector('svg').style.display = 'none';
         
-        if (sharedCryptoKey) {
+        if (dataConnection && dataConnection.open && sharedCryptoKey && localE2EEReady && remoteE2EEReady) {
             sendBtn.disabled = false;
         }
     }
 });
 
 sendBtn.addEventListener('click', () => {
-    if (fileToSend && dataConnection && dataConnection.open && sharedCryptoKey) {
+    if (fileToSend && dataConnection && dataConnection.open && sharedCryptoKey && localE2EEReady && remoteE2EEReady) {
         sendFile(fileToSend);
     }
 });
 
 // File Transfer Logic
 function sendFile(file) {
+    if (!dataConnection || !dataConnection.open || !sharedCryptoKey || !localE2EEReady || !remoteE2EEReady) {
+        console.error('[SENDER] Cannot send file before E2EE COMPLETE');
+        return;
+    }
     sendBtn.disabled = true;
     fileInput.disabled = true;
     progressContainer.classList.remove('hidden');
