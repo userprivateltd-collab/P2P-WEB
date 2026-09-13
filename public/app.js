@@ -50,6 +50,11 @@ const progressContainer = document.getElementById('progress-container');
 const progressBar = document.getElementById('progress-bar');
 const progressPercentage = document.getElementById('progress-percentage');
 const downloadContainer = document.getElementById('download-container');
+const fileQueuePanel = document.getElementById('file-queue-panel');
+const fileQueueList = document.getElementById('file-queue-list');
+const queueSummary = document.getElementById('queue-summary');
+const clearQueueBtn = document.getElementById('clear-queue-btn');
+const themeToggle = document.getElementById('theme-toggle');
 
 // =========================================================================
 // APPLICATION STATE
@@ -1291,6 +1296,52 @@ function generateRoomCode() {
     return code;
 }
 
+function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, character => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    }[character]));
+}
+
+function renderFileQueue() {
+    if (!fileQueuePanel || !fileQueueList || !queueSummary) return;
+
+    if (filesToTransfer.length === 0) {
+        fileQueuePanel.classList.add('hidden');
+        fileQueueList.innerHTML = '';
+        queueSummary.innerText = '0 files';
+        return;
+    }
+
+    const totalSize = filesToTransfer.reduce((sum, file) => sum + file.size, 0);
+    fileQueuePanel.classList.remove('hidden');
+    queueSummary.innerText = `${filesToTransfer.length} ${filesToTransfer.length === 1 ? 'file' : 'files'} | ${formatBytes(totalSize)}`;
+    fileQueueList.innerHTML = filesToTransfer.map((file, index) => `
+        <div class="queue-item">
+            <div class="queue-item-icon">FILE</div>
+            <div class="queue-item-meta">
+                <span class="queue-item-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
+                <span class="queue-item-size">${formatBytes(file.size)}</span>
+            </div>
+            <button class="queue-remove" type="button" data-queue-index="${index}" title="Remove file" aria-label="Remove ${escapeHtml(file.name)}">X</button>
+        </div>
+    `).join('');
+
+    fileQueueList.querySelectorAll('.queue-remove').forEach(button => {
+        button.addEventListener('click', () => {
+            filesToTransfer.splice(Number(button.dataset.queueIndex), 1);
+            if (filesToTransfer.length === 0) {
+                resetFileSelection();
+            } else {
+                renderFileQueue();
+            }
+        });
+    });
+}
+
 fileInput.addEventListener('change', (e) => {
     if (e.target.files.length > 0) {
         filesToTransfer = Array.from(e.target.files);
@@ -1309,6 +1360,7 @@ fileInput.addEventListener('change', (e) => {
         if (dataConnection && dataConnection.open && sharedCryptoKey && localE2EEReady && remoteE2EEReady) {
             sendBtn.disabled = false;
         }
+        renderFileQueue();
     }
 });
 
@@ -1346,6 +1398,9 @@ function resetFileSelection() {
     if (promptEl) promptEl.style.display = 'block';
     if (iconEl) iconEl.style.display = 'flex';
     sendBtn.disabled = true;
+    if (fileQueuePanel) fileQueuePanel.classList.add('hidden');
+    if (fileQueueList) fileQueueList.innerHTML = '';
+    if (queueSummary) queueSummary.innerText = '0 files';
 }
 
 function resetTransferState() {
@@ -1492,6 +1547,26 @@ function scanFrameLoop() {
     }
 
     scannerAnimId = requestAnimationFrame(scanFrameLoop);
+}
+
+function applyTheme(theme) {
+    document.body.dataset.theme = theme;
+    if (themeToggle) {
+        const label = theme === 'light' ? 'Use dark theme' : 'Use light theme';
+        themeToggle.title = label;
+        themeToggle.setAttribute('aria-label', label);
+    }
+}
+
+const savedTheme = localStorage.getItem('airodump-theme');
+applyTheme(savedTheme === 'light' ? 'light' : 'dark');
+
+if (themeToggle) {
+    themeToggle.addEventListener('click', () => {
+        const nextTheme = document.body.dataset.theme === 'light' ? 'dark' : 'light';
+        localStorage.setItem('airodump-theme', nextTheme);
+        applyTheme(nextTheme);
+    });
 }
 
 // Auto-join if user scanned QR code with native phone camera app
