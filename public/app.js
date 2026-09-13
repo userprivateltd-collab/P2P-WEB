@@ -1420,16 +1420,37 @@ function resetTransferState() {
     document.querySelector('.connection-status').innerHTML = '<span class="status-dot connected"></span> Connected to peer';
 }
 
-function renderQRCode(code) {
+let qrLibraryPromise = null;
+
+function loadQRCodeLibrary() {
+    if (window.QRCode && window.QRCode.toCanvas) return Promise.resolve(true);
+    if (qrLibraryPromise) return qrLibraryPromise;
+
+    qrLibraryPromise = new Promise(resolve => {
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js';
+        script.async = true;
+        script.onload = () => resolve(!!(window.QRCode && window.QRCode.toCanvas));
+        script.onerror = () => resolve(false);
+        document.head.appendChild(script);
+    });
+
+    return qrLibraryPromise;
+}
+
+async function renderQRCode(code) {
     const qrBox = document.getElementById('qr-code-box');
     const canvas = document.getElementById('qr-canvas');
+    const qrHint = document.getElementById('qr-hint');
     if (!qrBox || !canvas) return;
 
     qrBox.classList.remove('hidden');
 
     const joinUrl = `${window.location.origin}${window.location.pathname}?room=${code}`;
+    if (qrHint) qrHint.innerText = 'Preparing secure QR code...';
 
-    if (window.QRCode && window.QRCode.toCanvas) {
+    const qrReady = await loadQRCodeLibrary();
+    if (qrReady) {
         window.QRCode.toCanvas(canvas, joinUrl, {
             width: 160,
             margin: 1,
@@ -1438,8 +1459,15 @@ function renderQRCode(code) {
                 light: '#ffffff'
             }
         }, function (error) {
-            if (error) console.error("[QR GENERATOR] Error:", error);
+            if (error) {
+                console.error('[QR GENERATOR] Error:', error);
+                if (qrHint) qrHint.innerText = 'Use the room code above to join.';
+                return;
+            }
+            if (qrHint) qrHint.innerText = 'Scan with mobile camera';
         });
+    } else if (qrHint) {
+        qrHint.innerText = 'QR unavailable here. Use the room code above.';
     }
 }
 

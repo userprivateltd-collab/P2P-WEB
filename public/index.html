@@ -107,7 +107,7 @@
                             </div>
                             <div id="qr-code-box" class="qr-code-box hidden">
                                 <canvas id="qr-canvas" width="160" height="160"></canvas>
-                                <p class="qr-hint">Scan with mobile camera</p>
+                                <p id="qr-hint" class="qr-hint">Scan with mobile camera</p>
                             </div>
                         </div>
                     </div>
@@ -428,8 +428,8 @@
         </div>
     </div>
 
-    <!-- Scripts CDN for QR Generation & Camera Decoding -->
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <!-- Local QR generation avoids blocking room creation when a CDN is unavailable. -->
+    <script src="qrcode.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script src="app.js"></script>
