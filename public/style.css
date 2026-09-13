@@ -1046,18 +1046,18 @@ input[type="text"]:focus {
 
 .modal-overlay {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
+    inset: 0;
+    width: 100%;
+    height: 100%;
     background: rgba(6, 7, 10, 0.85);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    z-index: 9999;
+    z-index: 99999;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 20px;
+    padding: 24px 16px;
+    box-sizing: border-box;
     opacity: 1;
     transition: opacity 0.3s ease;
 }
@@ -1079,6 +1079,7 @@ input[type="text"]:focus {
     display: flex;
     flex-direction: column;
     gap: 18px;
+    box-sizing: border-box;
 }
 
 .scanner-modal-header {
@@ -1156,15 +1157,16 @@ input[type="text"]:focus {
 
 .code-modal-card {
     width: 100%;
-    max-width: 420px;
+    max-width: 440px;
     background: rgba(14, 19, 31, 0.95);
     border: 1px solid rgba(0, 198, 255, 0.3);
     border-radius: var(--radius-xl);
-    padding: 26px;
+    padding: 28px 24px;
     box-shadow: 0 25px 60px rgba(0, 0, 0, 0.9), 0 0 35px rgba(0, 198, 255, 0.2);
     display: flex;
     flex-direction: column;
     gap: 20px;
+    box-sizing: border-box;
     animation: modalPopIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
@@ -1214,13 +1216,16 @@ input[type="text"]:focus {
     display: flex;
     gap: 12px;
     justify-content: center;
+    align-items: center;
     width: 100%;
     margin: 8px 0;
+    box-sizing: border-box;
 }
 
 .pin-box {
     width: 58px;
     height: 64px;
+    max-width: calc((100% - 36px) / 4);
     background: rgba(0, 0, 0, 0.55);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md);
@@ -1233,6 +1238,7 @@ input[type="text"]:focus {
     outline: none;
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    box-sizing: border-box;
 }
 
 .pin-box:focus {
@@ -1492,9 +1498,19 @@ input[type="text"]:focus {
         text-overflow: ellipsis;
     }
 
+    .code-modal-card {
+        padding: 22px 16px;
+        max-width: 100%;
+    }
+
+    .pin-inputs-container {
+        gap: 8px;
+    }
+
     .pin-box {
         width: 48px;
         height: 56px;
+        max-width: calc((100% - 24px) / 4);
         font-size: 1.35rem;
     }
 
