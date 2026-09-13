@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title>AIRODUMP</title>
+  <defs>
+    <linearGradient id="bg" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#08c7ff"/>
+      <stop offset="1" stop-color="#1768e8"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="17" y1="13" x2="48" y2="51" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff"/>
+      <stop offset="1" stop-color="#d9f6ff"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="#07111f"/>
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#bg)"/>
+  <path d="m32 10 22 11-22 11-22-11 22-11Z" fill="url(#mark)"/>
+  <path d="m10 31 22 11 22-11v10L32 52 10 41V31Z" fill="url(#mark)" opacity=".86"/>
+</svg>
